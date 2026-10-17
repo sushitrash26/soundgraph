@@ -22,6 +22,7 @@ export default function App() {
     authStatus, 
     triggerDemoSeed, 
     isLoading,
+    isCheckingAuth,
     refreshDashboard,
     toggleChat 
   } = useStore();
@@ -31,18 +32,32 @@ export default function App() {
   useEffect(() => {
     checkAuth();
 
-    // Check query params for OAuth redirects
+    // Check query params for OAuth redirects or path-based route
     const params = new URLSearchParams(window.location.search);
     if (params.get('spotify_auth') === 'success') {
+      setActiveTab('dashboard');
       setNotification('Spotify connected! Auto-ingesting listening history...');
       axios.post('http://localhost:8001/ingest/spotify').then(() => {
         setTimeout(() => refreshDashboard(), 3500);
       });
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else if (params.get('google_auth') === 'success') {
+      setActiveTab('dashboard');
       setNotification('Google connected! Auto-ingesting YouTube Music & liked songs...');
       axios.post('http://localhost:8001/ingest/youtube').then(() => {
         setTimeout(() => refreshDashboard(), 3500);
       });
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('google_auth') === 'error') {
+      setNotification(`Google login failed: ${params.get('msg') || 'Check credentials'}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('spotify_auth') === 'error') {
+      setNotification(`Spotify login failed: ${params.get('msg') || 'Check credentials'}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (window.location.pathname.includes('/dashboard')) {
+      setActiveTab('dashboard');
+    } else if (window.location.pathname.includes('/explorer')) {
+      setActiveTab('explorer');
     }
   }, []);
 
@@ -327,8 +342,31 @@ export default function App() {
         </header>
 
       {/* Main View Router */}
-      <main style={{ flex: 1 }}>
-        {!user || activeTab === 'landing' ? (
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {isCheckingAuth ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+            <div style={{ textAlign: 'center' }}>
+              <img 
+                src="/soundgraph_logo.jpg" 
+                alt="SoundGraph" 
+                style={{ 
+                  width: 52, 
+                  height: 52, 
+                  borderRadius: '16px', 
+                  boxShadow: '0 0 30px rgba(168, 85, 247, 0.4)',
+                  border: '1.5px solid rgba(168, 85, 247, 0.5)',
+                  marginBottom: '16px' 
+                }} 
+              />
+              <div style={{ color: '#fff', fontSize: '15px', fontWeight: '700', fontFamily: 'var(--font-heading)' }}>
+                Connecting to SoundGraph...
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '12.5px', marginTop: '4px' }}>
+                Verifying cross-platform taste graph session
+              </div>
+            </div>
+          </div>
+        ) : !user || activeTab === 'landing' ? (
           <Landing />
         ) : activeTab === 'explorer' ? (
           <Explorer />

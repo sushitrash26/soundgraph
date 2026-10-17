@@ -97,9 +97,6 @@ async def ingest_youtube(background_tasks: BackgroundTasks):
     background_tasks.add_task(_do_youtube_ingest)
     return {"status": "started", "message": "YouTube Music ingestion launched in background."}
 
-    background_tasks.add_task(_do_youtube_ingest)
-    return {"status": "started", "message": "YouTube Music ingestion launched in background."}
-
 @router.post("/youtube/sync")
 async def sync_youtube_custom(request: Request, background_tasks: BackgroundTasks):
     """Sync YouTube Music via Playlist URL or Artist/Genre Search term"""

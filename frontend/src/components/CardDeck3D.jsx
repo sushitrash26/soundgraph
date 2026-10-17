@@ -29,6 +29,12 @@ export default function CardDeck3D() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipeDirection, setSwipeDirection] = useState(null);
 
+  const cardStartTimeRef = React.useRef(Date.now());
+
+  React.useEffect(() => {
+    cardStartTimeRef.current = Date.now();
+  }, [currentIndex]);
+
   if (!recommendations || recommendations.length === 0) {
     return (
       <div style={{
@@ -52,13 +58,8 @@ export default function CardDeck3D() {
   const activeCards = recommendations.slice(currentIndex, currentIndex + 3);
   const currentCard = activeCards[0] || recommendations[0];
 
-  const cardStartTimeRef = React.useRef(Date.now());
-
-  React.useEffect(() => {
-    cardStartTimeRef.current = Date.now();
-  }, [currentIndex]);
-
   const handleAction = async (reward) => {
+    if (!currentCard) return;
     setSwipeDirection(reward > 0 ? 'right' : 'left');
     await sendFeedback(currentCard.track_id || currentCard.id, reward);
     setTimeout(() => {

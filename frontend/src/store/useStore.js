@@ -2,10 +2,12 @@ import { create } from 'zustand';
 import axios from 'axios';
 
 const API_BASE = 'http://localhost:8001';
+axios.defaults.withCredentials = true;
 
 export const useStore = create((set, get) => ({
   activeTab: 'landing', // defaults to landing / sign-in screen for fresh users!
   user: null,           // will be populated on login
+  isCheckingAuth: true,
   authStatus: {
     spotify_connected: false,
     google_connected: false,
@@ -178,16 +180,19 @@ export const useStore = create((set, get) => ({
         set({ 
           user, 
           activeTab: 'dashboard',
-          authStatus: { spotify_connected, google_connected, has_spotify_keys, has_google_keys }
+          authStatus: { spotify_connected, google_connected, has_spotify_keys, has_google_keys },
+          isCheckingAuth: false
         });
         get().refreshDashboard();
       } else {
         set({ 
-          authStatus: { spotify_connected, google_connected, has_spotify_keys, has_google_keys }
+          authStatus: { spotify_connected, google_connected, has_spotify_keys, has_google_keys },
+          isCheckingAuth: false
         });
       }
     } catch (e) {
       console.warn('Check auth error:', e);
+      set({ isCheckingAuth: false });
     }
   },
 
