@@ -173,6 +173,29 @@ export default function AcousticLensModal({ isOpen, onClose }) {
     }
   };
 
+  const handleSelectCandidate = (cand) => {
+    const card = {
+      track_id: `youtube:video:${cand.video_id || 'nyuo9-OjNNg'}`,
+      id: `youtube:video:${cand.video_id || 'nyuo9-OjNNg'}`,
+      track_name: cand.title,
+      name: cand.title,
+      artists: [cand.artist],
+      genres: result?.genres || ['Acoustic'],
+      source: 'youtube',
+      cover_url: cand.thumbnail || result?.thumbnail,
+      uri: cand.youtube_url || `https://www.youtube.com/watch?v=${cand.video_id}`,
+      preview_url: cand.youtube_url || `https://www.youtube.com/watch?v=${cand.video_id}`,
+      score: 0.92,
+      popularity: 85,
+      bandit_arm: 3,
+      arm_name: 'frontier_wildcard',
+      reason: `✨ Melodic Match: ${cand.reason}`,
+      transition_flow: 'Alternative Melodic Resolution'
+    };
+    playTrack(card);
+    onClose();
+  };
+
   return (
     <div style={{
       position: 'fixed',
@@ -483,16 +506,107 @@ export default function AcousticLensModal({ isOpen, onClose }) {
               background: 'rgba(255, 255, 255, 0.02)',
               border: '1px solid rgba(255, 255, 255, 0.06)',
               borderRadius: '14px',
-              padding: '10px 14px',
-              marginBottom: '20px'
+              padding: '12px 14px',
+              marginBottom: '16px'
             }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
-                🌊 Acoustic Character
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  🌊 Acoustic Character
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <span style={{
+                    fontSize: '10.5px',
+                    fontWeight: '700',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: result.timbre_type === 'vocal_hum' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                    border: `1px solid ${result.timbre_type === 'vocal_hum' ? 'rgba(168, 85, 247, 0.35)' : 'rgba(56, 189, 248, 0.35)'}`,
+                    color: result.timbre_type === 'vocal_hum' ? '#c084fc' : '#38bdf8'
+                  }}>
+                    {result.timbre_type === 'vocal_hum' ? '🎤 Vocal / Hum' : '📻 Master Audio'}
+                  </span>
+                  {result.dominant_keys && result.dominant_keys.length > 0 && (
+                    <span style={{
+                      fontSize: '10.5px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#cbd5e1'
+                    }}>
+                      🎹 {result.dominant_keys.join(', ')}
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                 {result.vibe_description}
               </div>
             </div>
+
+            {/* Alternative Melodic Matches (if humming or multiple candidates) */}
+            {result.candidates && result.candidates.length > 0 && (
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                  🎵 Alternative Melodic Matches
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {result.candidates.map((cand, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectCandidate(cand)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.07)',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(168, 85, 247, 0.12)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                        {cand.thumbnail ? (
+                          <img src={cand.thumbnail} alt={cand.title} style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Music size={14} color="#94a3b8" />
+                          </div>
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '12.5px', fontWeight: '600', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {cand.title}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {cand.artist} • <span style={{ color: '#c084fc' }}>{cand.reason}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button style={{
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}>
+                        <Play size={12} fill="#fff" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', gap: '10px' }}>

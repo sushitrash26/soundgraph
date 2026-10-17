@@ -9,16 +9,19 @@ from backend.core.config import settings
 from backend.core.logger import logger
 from backend.core.cache import UnifiedCache
 from backend.core.bandit import ContextualLinUCB
+from backend.core.sonic_manifold import SonicManifold
 from backend.embeddings.gemini_embedder import GeminiEmbedder
 from backend.graph.loader import GraphLoader
 from backend.graph.queries import GraphQueries
 
 class AcousticLensService:
     """
-    Acoustic Lens: Next-Generation AI Sonic Identification & YouTube Resolver.
-    Listens to live audio snippets, transcribes singing/humming/lyrics, filters noise,
-    reverse-resolves global song catalogs (iTunes + YTMusic), resolves exact YouTube streams,
-    and integrates seamlessly into the user's taste graph.
+    Acoustic Lens: Next-Generation Audio Graph-RAG & Sonic Identification Engine.
+    Combines:
+    1. SonicManifold DSP: 12-D Harmonic Chroma extraction & monophonic vocal timbre tracking.
+    2. Neo4j Graph-RAG: Traverses user taste graph, artist subgraphs, and vector space.
+    3. Multimodal Audio Intelligence (Gemini 3.5 Flash Lite): Lyric phonetics & melodic cognition.
+    4. Open-World Catalog Federation: Resolves any song across 100M+ global catalog with YouTube streaming.
     """
 
     @classmethod
@@ -33,57 +36,99 @@ class AcousticLensService:
         if not api_key:
             return {"status": "error", "message": "Gemini API key is not configured."}
 
-        logger.info(f"AcousticLens: Processing {len(audio_bytes)} bytes of audio ({mime_type}) for user {user_id}")
+        logger.info(f"AcousticLens: Processing {len(audio_bytes)} bytes ({mime_type}) for user {user_id}")
 
-        # 1. Analyze sonic audio with Gemini Audio Intelligence
+        # 1. SonicManifold DSP Signal Analysis (Chroma, Pitch Salience, Timbre)
+        manifold_res = SonicManifold.analyze_audio(audio_bytes, mime_type)
+        timbre_type = manifold_res.get("timbre_type", "unknown")
+        dominant_keys = manifold_res.get("dominant_keys", [])
+        is_vocal = manifold_res.get("is_monophonic_vocal", False)
+
+        logger.info(f"AcousticLens: DSP Timbre='{timbre_type}', Keys={dominant_keys}, Salience={manifold_res.get('pitch_salience')}")
+
+        if timbre_type == "silence":
+            return {
+                "status": "unrecognized",
+                "message": "No audible singing, humming, or music was detected. Please hold your microphone closer and try again!",
+                "confidence": 0.0,
+                "timbre_type": "silence"
+            }
+
+        # 2. Neo4j Graph-RAG Context Extraction
+        graph_context_artists = []
+        try:
+            from backend.core.neo4j_driver import neo4j_conn
+            # Fetch user's most listened artists from graph
+            user_artist_nodes = neo4j_conn.query(
+                """
+                MATCH (u:User {id: $uid})-[:LISTENED_TO]->(t:Track)-[:BY]->(a:Artist)
+                RETURN a.name AS name, count(t) AS weight
+                ORDER BY weight DESC LIMIT 6
+                """,
+                {"uid": user_id}
+            )
+            if user_artist_nodes:
+                graph_context_artists = [r["name"] for r in user_artist_nodes if r.get("name")]
+
+            # Fallback to top catalog artists in graph if user history is young
+            if not graph_context_artists:
+                top_nodes = neo4j_conn.query("MATCH (a:Artist) RETURN a.name AS name LIMIT 12")
+                if top_nodes:
+                    graph_context_artists = [r["name"] for r in top_nodes if r.get("name")]
+        except Exception as e:
+            logger.warning(f"AcousticLens: Neo4j graph context warning: {e}")
+
+        # 3. Multimodal Audio Intelligence (Gemini 3.5 Flash Lite)
         b64_audio = base64.b64encode(audio_bytes).decode("ascii")
 
         system_instruction = (
-            "You are SoundGraph's Acoustic Lens — an elite music AI, audio intelligence engine, and lyrics recognition system.\n"
+            "You are SoundGraph's Acoustic Lens — an elite musicologist and audio intelligence AI.\n"
             "You are listening to an audio recording from a user's microphone.\n"
-            "Crucial Context:\n"
-            "- The user is singing, humming, or vocalizing lyrics into their microphone (potentially with background room/fan noise or imperfect pitch).\n"
-            "- Alternatively, a commercial song might be playing in the background or from speakers.\n"
+            f"Acoustic Signal Intelligence: Timbre Type = '{timbre_type}'. Dominant Pitch Classes = {dominant_keys}.\n"
+        )
+        if graph_context_artists:
+            system_instruction += f"User Taste Graph Context: Frequently explores artists: {', '.join(graph_context_artists)}.\n"
+
+        system_instruction += (
             "\n"
-            "Your tasks:\n"
-            "1. LYRICS TRANSCRIPTION: Transcribe any vocal lyrics, chorus lines, or words heard through any background noise. If the user is humming or whistling a melody without words, set lyrics to '[Humming/Melody]'. If pure silence/static/unintelligible noise, set lyrics to null.\n"
+            "Your Tasks:\n"
+            "1. LYRICS TRANSCRIPTION: Transcribe any vocal lyrics, chorus phrases, or spoken words heard. "
+            "If the user is purely humming, whistling, or vocalizing a melody without words, set lyrics to '[Humming/Melody]'. "
+            "If complete noise or static, set lyrics to null.\n"
             "2. SONG IDENTIFICATION:\n"
-            "   - If lyrics or a song melody are heard, deduce the most likely commercial song title and primary artist.\n"
-            "   - Cover all genres: Pop, Rock, Bollywood, Hip-Hop, Indie, R&B, EDM, Classical, etc.\n"
-            "   - If you can identify the song, set 'title' and 'artist' and confidence (0.80 to 0.99).\n"
-            "   - If the user sings original lyrics or an unreleased tune, set 'title' to a title derived from the lyrics, 'artist' to 'Live Vocalist', and confidence 0.60.\n"
-            "   - ONLY if the audio contains zero vocals, zero melody, pure room noise or complete silence, set 'title': null, 'artist': null, 'confidence': 0.0.\n"
+            "   - If lyrics or words are sung, deduce the exact commercial song title and primary artist.\n"
+            "   - If humming/whistling, identify the most likely song whose melodic hook matches that pitch progression.\n"
+            "   - Provide up to 3 candidate matching songs in the 'candidates' array with reasons.\n"
+            "   - If confidence is high (>0.85), provide the primary title and artist.\n"
+            "   - If audio is pure noise or unintelligible static with no musical content, set title: null, artist: null, confidence: 0.0.\n"
             "3. YOUTUBE SEARCH QUERY:\n"
-            "   - If song identified: '<Song Title> <Artist Name>'\n"
-            "   - If lyrics transcribed: '<transcribed lyrics> song'\n"
-            "   - If humming: '<mood tempo genre> melody song'\n"
-            "   - NEVER output placeholders like 'Sonic Resonance' or 'SoundGraph Acoustic Lens'.\n"
-            "4. AESTHETICS:\n"
-            "   - vibe_description: describe the vocal style, tempo, emotional vibe, and instrumentation.\n"
-            "   - energy (0.0 to 1.0), valence (0.0 to 1.0), danceability (0.0 to 1.0).\n"
-            "   - genres: list of 2-4 strings.\n"
+            "   - Provide the best YouTube search query: '<Song Title> <Artist Name>' or '<lyrics> song'.\n"
+            "4. AESTHETICS: energy (0.0 to 1.0), valence (0.0 to 1.0), danceability (0.0 to 1.0), genres (list of 2-4 strings).\n"
             "\n"
             "Respond STRICTLY in JSON format:\n"
             "{\n"
             '  "title": "Song Title or null",\n'
             '  "artist": "Artist Name or null",\n'
-            '  "confidence": 0.95,\n'
+            '  "confidence": 0.90,\n'
             '  "lyrics": "transcribed lyrics or null",\n'
-            '  "vibe_description": "vocal and musical description",\n'
-            '  "youtube_search_query": "target YouTube query",\n'
+            '  "vibe_description": "Acoustic and vocal analysis",\n'
+            '  "youtube_search_query": "YouTube search query",\n'
             '  "energy": 0.7,\n'
             '  "valence": 0.6,\n'
             '  "danceability": 0.65,\n'
-            '  "genres": ["Pop", "Indie"]\n'
+            '  "genres": ["Genre1", "Genre2"],\n'
+            '  "candidates": [\n'
+            '    {"title": "Candidate Song 1", "artist": "Artist 1", "reason": "Hook melody match"},\n'
+            '    {"title": "Candidate Song 2", "artist": "Artist 2", "reason": "Alternative tempo match"}\n'
+            '  ]\n'
             "}"
         )
 
-        prompt_text = "Listen carefully to this audio snippet. Transcribe any sung lyrics or humming, and identify the song and artist."
+        prompt_text = "Analyze this audio snippet. Transcribe any lyrics and identify the song and candidate matches."
         if text_hint and text_hint.strip():
             prompt_text += f" User note/context: {text_hint.strip()}"
 
         ai_analysis = {}
-        # Ultra-fast, available models prioritized
         candidate_models = [
             "gemini-3.5-flash-lite",
             "gemini-flash-lite-latest",
@@ -112,21 +157,22 @@ class AcousticLensService:
                     if res.status_code == 200:
                         text_resp = res.json()["candidates"][0]["content"]["parts"][0]["text"]
                         ai_analysis = json.loads(text_resp)
-                        logger.info(f"AcousticLens: [{model_name}] identified -> title='{ai_analysis.get('title')}', artist='{ai_analysis.get('artist')}', lyrics='{ai_analysis.get('lyrics')}'")
+                        logger.info(f"AcousticLens: [{model_name}] identified -> '{ai_analysis.get('title')}' by '{ai_analysis.get('artist')}'")
                         break
                     else:
                         logger.warning(f"AcousticLens: {model_name} status {res.status_code}: {res.text[:160]}")
             except Exception as e:
                 logger.warning(f"AcousticLens: Error calling {model_name}: {e}")
 
-        # 2. Extract values and reverse-resolve lyrics if needed
+        # 4. Extract & Reverse-Resolve Lyrics
         detected_title = ai_analysis.get("title")
         detected_artist = ai_analysis.get("artist")
         detected_lyrics = ai_analysis.get("lyrics")
         vibe_desc = ai_analysis.get("vibe_description") or ""
         confidence = float(ai_analysis.get("confidence", 0.0))
+        raw_candidates = ai_analysis.get("candidates") or []
 
-        # Clean null strings from LLM output
+        # Clean null strings
         if detected_title and detected_title.lower() in ["null", "none", "unknown", ""]:
             detected_title = None
         if detected_artist and detected_artist.lower() in ["null", "none", "unknown", ""]:
@@ -134,7 +180,7 @@ class AcousticLensService:
         if detected_lyrics and detected_lyrics.lower() in ["null", "none", ""]:
             detected_lyrics = None
 
-        # If lyrics were heard, reverse-match against global catalog to verify song title & artist
+        # Reverse-match sung lyrics against 100M+ global catalog (Apple Music / YTMusic)
         if detected_lyrics and detected_lyrics != "[Humming/Melody]":
             lyric_match = cls._resolve_lyrics_to_song(detected_lyrics)
             if lyric_match:
@@ -143,31 +189,34 @@ class AcousticLensService:
                 detected_artist = lyric_match["artist"]
                 confidence = max(confidence, lyric_match["confidence"])
 
-        # If nothing recognizable was heard (e.g. pure silence, static, or blank)
-        if not detected_title and not detected_lyrics:
+        # If pure silence or no lyrics/melody
+        if not detected_title and not detected_lyrics and not raw_candidates:
             return {
                 "status": "unrecognized",
                 "message": "We couldn't clearly pick up singing, melody, or lyrics from this recording. Please hold your microphone closer and try singing a phrase or chorus!",
-                "confidence": 0.0
+                "confidence": 0.0,
+                "timbre_type": timbre_type
             }
 
-        # If humming/melody or unidentified lyrics
+        # If humming or unverified title
         if not detected_title:
-            if detected_lyrics and detected_lyrics != "[Humming/Melody]":
+            if raw_candidates and raw_candidates[0].get("title"):
+                detected_title = raw_candidates[0]["title"]
+                detected_artist = raw_candidates[0].get("artist") or "Featured Artist"
+            elif detected_lyrics and detected_lyrics != "[Humming/Melody]":
                 detected_title = f"Vocal: {detected_lyrics[:28]}"
+                detected_artist = "Live Vocalist"
             else:
                 detected_title = "Acoustic Melody"
+                detected_artist = "Live Performance"
 
         if not detected_artist:
-            detected_artist = "Live Performance"
-
-        if not vibe_desc:
-            vibe_desc = "Live acoustic discovery"
+            detected_artist = "Featured Artist"
 
         confidence = max(confidence, 0.75)
 
-        # 3. Formulate specific YouTube search query
-        if detected_title and detected_artist and detected_artist not in ["Live Performance", "Unknown"]:
+        # 5. Formulate YouTube query & resolve official stream
+        if detected_title and detected_artist and detected_artist not in ["Live Performance", "Featured Artist", "Unknown"]:
             yt_query = f"{detected_title} {detected_artist}"
         elif detected_lyrics and detected_lyrics != "[Humming/Melody]":
             yt_query = f"{detected_lyrics} song"
@@ -176,12 +225,12 @@ class AcousticLensService:
 
         genres = ai_analysis.get("genres") or ["pop", "acoustic", "indie"]
 
-        # 4. Compute 768-D Waveform Embedding
+        # 6. Compute 768-D Waveform Embedding
         audio_vec = await GeminiEmbedder.embed_audio(audio_bytes, mime_type=mime_type)
         if not audio_vec:
             audio_vec = await GeminiEmbedder.embed_text(f"Track: {detected_title}. Artist: {detected_artist}. Lyrics: {detected_lyrics}. Vibe: {vibe_desc}")
 
-        # 5. Resolve Real-Time YouTube Video Stream
+        # 7. Resolve Real-Time YouTube Video Stream
         resolved_yt = cls._resolve_youtube_stream(yt_query, detected_title, detected_artist)
 
         video_id = resolved_yt.get("video_id") or "nyuo9-OjNNg"
@@ -192,7 +241,23 @@ class AcousticLensService:
 
         track_id = f"youtube:video:{video_id}"
 
-        # 6. Ingest into Neo4j Graph
+        # 8. Resolve alternative candidate songs (for humming disambiguation)
+        resolved_candidates = []
+        for cand in raw_candidates[:3]:
+            c_title = cand.get("title")
+            c_artist = cand.get("artist") or ""
+            if c_title and c_title.lower() != track_name.lower():
+                c_stream = cls._resolve_youtube_stream(f"{c_title} {c_artist}", c_title, c_artist)
+                resolved_candidates.append({
+                    "title": c_title,
+                    "artist": c_artist,
+                    "reason": cand.get("reason") or "Melodic cadence match",
+                    "video_id": c_stream.get("video_id"),
+                    "youtube_url": c_stream.get("watch_url"),
+                    "thumbnail": c_stream.get("thumbnail")
+                })
+
+        # 9. Ingest into Neo4j Graph
         track_data = {
             "id": track_id,
             "name": track_name,
@@ -216,14 +281,14 @@ class AcousticLensService:
         except Exception as e:
             logger.warning(f"AcousticLens: Graph ingestion non-fatal warning: {e}")
 
-        # 7. Reward Contextual LinUCB Bandit
+        # 10. Reward Contextual LinUCB Bandit
         try:
             x = ContextualLinUCB.get_context_vector(session_depth=2)
             ContextualLinUCB.update(user_id=user_id, arm=3, x=x, reward=0.95)
         except Exception as e:
             logger.warning(f"AcousticLens: Bandit reward warning: {e}")
 
-        # 8. Build Rich Response for UI & Player
+        # 11. Build Rich Card for UI & Player
         card = {
             "track_id": track_id,
             "id": track_id,
@@ -258,6 +323,10 @@ class AcousticLensService:
             "confidence": confidence,
             "detected_lyrics": detected_lyrics,
             "vibe_description": vibe_desc,
+            "timbre_type": timbre_type,
+            "dominant_keys": dominant_keys,
+            "chroma_profile": manifold_res.get("chroma_vector", []),
+            "candidates": resolved_candidates,
             "genres": genres,
             "features": {
                 "energy": track_data["energy"],
@@ -277,29 +346,12 @@ class AcousticLensService:
             return None
         clean = lyrics.strip().replace('"', '').replace("'", "")
 
-        # 1. Query iTunes Search API (fast, authoritative catalog)
-        try:
-            r = httpx.get(
-                "https://itunes.apple.com/search",
-                params={"term": clean, "media": "music", "limit": 3},
-                timeout=3.5
-            )
-            if r.status_code == 200:
-                results = r.json().get("results", [])
-                if results:
-                    top = results[0]
-                    return {
-                        "title": top.get("trackName"),
-                        "artist": top.get("artistName"),
-                        "confidence": 0.96
-                    }
-        except Exception as e:
-            logger.warning(f"AcousticLens: iTunes lyric search warning: {e}")
-
-        # 2. Query YTMusic Songs catalog
+        # 1. Query YTMusic Songs catalog (matches full licensed lyric database)
         try:
             yt = YTMusic()
             yres = yt.search(f"{clean} song", filter="songs", limit=3)
+            if not yres:
+                yres = yt.search(clean, filter="songs", limit=3)
             if not yres:
                 yres = yt.search(clean, limit=3)
             if yres:
@@ -309,10 +361,29 @@ class AcousticLensService:
                         return {
                             "title": item.get("title"),
                             "artist": artists[0] if artists else "Featured Artist",
-                            "confidence": 0.90
+                            "confidence": 0.98
                         }
         except Exception as e:
             logger.warning(f"AcousticLens: YTMusic lyric search warning: {e}")
+
+        # 2. Query iTunes Search API (fast, clean fallback)
+        try:
+            r = httpx.get(
+                "https://itunes.apple.com/search",
+                params={"term": f"{clean} song", "media": "music", "limit": 3},
+                timeout=3.5
+            )
+            if r.status_code == 200:
+                results = r.json().get("results", [])
+                if results:
+                    top = results[0]
+                    return {
+                        "title": top.get("trackName"),
+                        "artist": top.get("artistName"),
+                        "confidence": 0.92
+                    }
+        except Exception as e:
+            logger.warning(f"AcousticLens: iTunes lyric search warning: {e}")
 
         return None
 
