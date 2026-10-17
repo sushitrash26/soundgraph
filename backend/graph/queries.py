@@ -335,7 +335,8 @@ class GraphQueries:
                  count(DISTINCT seed) AS graph_affinity_count,
                  coalesce(f.reward, 0.0) AS feedback_reward
             WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
-                 round((vector_score * 0.60) + (case when graph_affinity_count > 0 then 0.25 else 0.10 end) + (feedback_reward * 0.15), 2) AS final_score
+                 // Prompt semantic cosine is primary! Subtle tie-breakers for liked & library affinity
+                 round(vector_score + (case when feedback_reward > 0 then 0.005 else 0.0 end) + (case when graph_affinity_count > 0 then 0.003 else 0.0 end), 3) AS final_score
             RETURN DISTINCT
                 rec.id AS track_id,
                 rec.name AS track_name,
