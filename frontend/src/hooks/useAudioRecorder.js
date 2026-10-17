@@ -67,12 +67,12 @@ export function useAudioRecorder() {
       mediaRecorder.start(250); // Slice every 250ms
       setIsRecording(true);
 
-      // Duration countdown / counter
+      // Duration countdown / counter (supports up to 30.0 seconds of continuous listening)
       const startTimestamp = Date.now();
       timerRef.current = setInterval(() => {
         const elapsed = (Date.now() - startTimestamp) / 1000;
-        setRecordingDuration(Math.min(elapsed, 7.5));
-        if (elapsed >= 7.5) {
+        setRecordingDuration(Math.min(elapsed, 30.0));
+        if (elapsed >= 30.0) {
           stopRecording();
         }
       }, 100);
@@ -89,6 +89,21 @@ export function useAudioRecorder() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
     }
+  }, []);
+
+  const getSnapshotBlob = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.requestData();
+        const mimeType = mediaRecorderRef.current.mimeType || 'audio/webm';
+        if (audioChunksRef.current.length > 0) {
+          return new Blob(audioChunksRef.current, { type: mimeType });
+        }
+      } catch (e) {
+        console.warn('requestData error:', e);
+      }
+    }
+    return null;
   }, []);
 
   const cleanupStreams = useCallback(() => {
@@ -124,6 +139,7 @@ export function useAudioRecorder() {
     startRecording,
     stopRecording,
     getAudioFrequencyData,
+    getSnapshotBlob,
     reset: () => {
       setAudioBlob(null);
       setError(null);

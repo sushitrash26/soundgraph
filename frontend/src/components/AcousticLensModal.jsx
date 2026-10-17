@@ -33,6 +33,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
     startRecording, 
     stopRecording, 
     getAudioFrequencyData, 
+    getSnapshotBlob,
     reset 
   } = useAudioRecorder();
 
@@ -43,6 +44,8 @@ export default function AcousticLensModal({ isOpen, onClose }) {
 
   const canvasRef = useRef(null);
   const animFrameRef = useRef(null);
+  const probeActiveRef = useRef(false);
+  const lastProbeTimeRef = useRef(0);
 
   // Frequency Waveform Visualizer on Canvas
   useEffect(() => {
@@ -108,8 +111,54 @@ export default function AcousticLensModal({ isOpen, onClose }) {
   useEffect(() => {
     if (isRecording) {
       setState('recording');
+      probeActiveRef.current = false;
+      lastProbeTimeRef.current = 0;
     }
   }, [isRecording]);
+
+  // Real-time rolling background probe: checks at ~6s, 12s, 18s, 24s
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const currentSec = Math.floor(recordingDuration);
+    const probeCheckpoints = [6, 12, 18, 24];
+
+    if (
+      probeCheckpoints.includes(currentSec) &&
+      (currentSec - lastProbeTimeRef.current) >= 5 &&
+      !probeActiveRef.current
+    ) {
+      lastProbeTimeRef.current = currentSec;
+      const snapshot = getSnapshotBlob();
+      if (snapshot && snapshot.size > 20000) {
+        probeActiveRef.current = true;
+        const formData = new FormData();
+        const extension = snapshot.type.includes('webm') ? 'webm' : 'wav';
+        formData.append('file', snapshot, `probe.${extension}`);
+        formData.append('user_id', user?.id || 'astitva_demo_user');
+        if (hint.trim()) formData.append('hint', hint.trim());
+
+        axios.post('http://localhost:8001/vibe/identify-audio', formData)
+          .then((res) => {
+            if (res.data && res.data.status === 'success' && res.data.confidence >= 0.88) {
+              // Early lock-on achieved!
+              stopRecording();
+              setResult({
+                ...res.data,
+                early_detected: true,
+                detected_at: recordingDuration.toFixed(1)
+              });
+              setState('result');
+            } else {
+              probeActiveRef.current = false;
+            }
+          })
+          .catch(() => {
+            probeActiveRef.current = false;
+          });
+      }
+    }
+  }, [isRecording, recordingDuration, getSnapshotBlob, hint, user, stopRecording]);
 
   // When audioBlob is ready, dispatch to backend
   useEffect(() => {
@@ -348,16 +397,16 @@ export default function AcousticLensModal({ isOpen, onClose }) {
               }}>
                 <Radio size={28} color="#c084fc" className="pulse" />
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff', marginTop: '6px' }}>
-                  {(7.5 - recordingDuration).toFixed(1)}s
+                  {recordingDuration.toFixed(1)}s / 30.0s
                 </div>
               </div>
             </div>
 
             <div style={{ color: '#fff', fontSize: '15px', fontWeight: '700', marginTop: '16px' }}>
-              Listening to ambient audio...
+              Listening in real time...
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '12.5px', marginTop: '4px' }}>
-              Capturing acoustic frequencies & vocal phonetics
+              Auto-identifies when recognized (up to 30s), or tap Stop anytime
             </div>
 
             <button
@@ -424,19 +473,36 @@ export default function AcousticLensModal({ isOpen, onClose }) {
                 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '2px 8px',
-                  borderRadius: '999px',
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  color: '#4ade80',
-                  fontSize: '10.5px',
-                  fontWeight: '700',
-                  marginBottom: '4px'
-                }}>
-                  <CheckCircle2 size={11} /> {Math.round(result.confidence * 100)}% Verified Match
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap' }}>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '999px',
+                    background: 'rgba(34, 197, 94, 0.15)',
+                    color: '#4ade80',
+                    fontSize: '10.5px',
+                    fontWeight: '700'
+                  }}>
+                    <CheckCircle2 size={11} /> {Math.round(result.confidence * 100)}% Verified Match
+                  </div>
+                  {result.early_detected && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      background: 'rgba(168, 85, 247, 0.15)',
+                      border: '1px solid rgba(168, 85, 247, 0.35)',
+                      color: '#c084fc',
+                      fontSize: '10px',
+                      fontWeight: '700'
+                    }}>
+                      ⚡ Locked in {result.detected_at}s
+                    </div>
+                  )}
                 </div>
                 <h3 style={{
                   fontSize: '17px',
