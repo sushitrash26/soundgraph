@@ -120,6 +120,69 @@ class GraphLoader:
         return processed
 
     @staticmethod
+    def load_frontier_catalog_tracks(tracks: List[Dict[str, Any]]) -> int:
+        """
+        Loads candidate tracks discovered via FrontierFetcher into the global catalog.
+        Creates (t:Track), connects (a:Artist) and (g:Genre), and sets 768-D vector embedding.
+        Does NOT attach user LISTENED_TO edge.
+        """
+        query = """
+        UNWIND $batch AS item
+        MERGE (t:Track {id: item.id})
+        ON CREATE SET 
+            t.name = item.name,
+            t.source = item.source,
+            t.uri = item.uri,
+            t.popularity = item.popularity,
+            t.energy = item.energy,
+            t.valence = item.valence,
+            t.danceability = item.danceability,
+            t.embedding = item.embedding,
+            t.created_at = datetime()
+        ON MATCH SET
+            t.embedding = coalesce(item.embedding, t.embedding),
+            t.popularity = coalesce(item.popularity, t.popularity)
+
+        // Connect Artists
+        WITH t, item
+        FOREACH (artist_name IN item.artists |
+            MERGE (a:Artist {id: 'artist:' + toLower(trim(artist_name))})
+            ON CREATE SET a.name = artist_name, a.source = item.source
+            MERGE (t)-[:BY]->(a)
+        )
+
+        // Connect Genres
+        WITH t, item
+        FOREACH (genre_name IN item.genres |
+            MERGE (g:Genre {name: toLower(trim(genre_name))})
+            MERGE (t)-[:IN_GENRE]->(g)
+        )
+        RETURN count(t) as processed
+        """
+        cleaned_batch = []
+        for tr in tracks:
+            features = tr.get("features") or {}
+            cleaned_batch.append({
+                "id": tr["id"],
+                "name": tr.get("name") or tr.get("title") or "Unknown Track",
+                "source": tr.get("source", "youtube"),
+                "uri": tr.get("uri") or f"https://music.youtube.com/watch?v={tr['id'].replace('youtube:video:', '')}",
+                "popularity": tr.get("popularity", 75),
+                "energy": features.get("energy", 0.65),
+                "valence": features.get("valence", 0.55),
+                "danceability": features.get("danceability", 0.60),
+                "artists": tr.get("artists") or ["Artist"],
+                "genres": tr.get("genres") or ["discovery"],
+                "embedding": tr.get("embedding")
+            })
+        try:
+            res = neo4j_conn.query(query, {"batch": cleaned_batch})
+            return res[0]["processed"] if res else 0
+        except Exception as e:
+            logger.error(f"Error loading frontier catalog tracks: {e}")
+            return 0
+
+    @staticmethod
     def seed_mock_dataset(user_id: str = "demo_user") -> Dict[str, Any]:
         """Seeds realistic cross-platform listening history for instant testing/demo"""
         GraphLoader.upsert_user({

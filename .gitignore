@@ -6,6 +6,8 @@ pw.txt
 credentials.json
 token.json
 .spotify_cache
+.cache
+.cache/
 *.pem
 *.key
 

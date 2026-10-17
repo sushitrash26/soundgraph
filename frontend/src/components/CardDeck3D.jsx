@@ -52,6 +52,12 @@ export default function CardDeck3D() {
   const activeCards = recommendations.slice(currentIndex, currentIndex + 3);
   const currentCard = activeCards[0] || recommendations[0];
 
+  const cardStartTimeRef = React.useRef(Date.now());
+
+  React.useEffect(() => {
+    cardStartTimeRef.current = Date.now();
+  }, [currentIndex]);
+
   const handleAction = async (reward) => {
     setSwipeDirection(reward > 0 ? 'right' : 'left');
     await sendFeedback(currentCard.track_id || currentCard.id, reward);
@@ -62,6 +68,14 @@ export default function CardDeck3D() {
   };
 
   const handleNext = () => {
+    const dwellMs = Date.now() - cardStartTimeRef.current;
+    if (dwellMs < 2500 && currentCard) {
+      // Rapid skip (< 2.5s) implies disinterest -> soft implicit negative
+      sendFeedback(currentCard.track_id || currentCard.id, -0.2);
+    } else if (dwellMs > 10000 && currentCard) {
+      // Long dwell (> 10s) implies engaged curiosity -> soft implicit positive
+      sendFeedback(currentCard.track_id || currentCard.id, 0.3);
+    }
     setCurrentIndex((prev) => (prev + 1 >= recommendations.length ? 0 : prev + 1));
   };
 

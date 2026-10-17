@@ -2,6 +2,8 @@ from typing import List, Dict, Any, Optional
 from backend.core.neo4j_driver import neo4j_conn
 from backend.core.logger import logger
 from backend.embeddings.gemini_embedder import GeminiEmbedder
+from backend.embeddings.persona_clusterer import PersonaClusterer
+from backend.ingestors.frontier_fetcher import FrontierFetcher
 
 class GraphQueries:
     @staticmethod
@@ -146,35 +148,43 @@ class GraphQueries:
     @staticmethod
     def get_recommendations(user_id: str, limit: int = 15) -> List[Dict[str, Any]]:
         """
-        Native Hybrid Graph + Vector (GraphRAG) Recommendation Engine:
-        1. Identifies user's seed embeddings from listened & positively-rated tracks
-        2. Queries Neo4j HNSW vector index (track_embeddings) using 768-dim Gemini embeddings
-        3. Traverses graph topology (artist collaborations, genre clusters, shared neighbors)
-        4. Excludes listened & disliked tracks (reward: -1.0)
-        5. Computes composite score: (0.55 * vector_sim) + (0.30 * graph_affinity) + (0.15 * rlhf_boost)
+        State-of-the-art Multi-Centroid Taste Persona & GraphRAG Recommendation Engine:
+        1. Solves Persona Collapse: Clusters user's listening history into up to 3 distinct Taste Personas via Spherical K-Means.
+        2. Queries Neo4j HNSW vector index for each persona centroid.
+        3. Interleaves candidates across personas so all facets of user taste are represented.
+        4. Injects ε-Greedy Exploration wildcard tracks (serendipitous discovery) to break filter bubbles.
+        5. Strictly excludes listened and disliked tracks (reward: -1.0).
         """
-        # Phase 1: Retrieve user seed track embeddings
-        seed_query = """
+        # Step 1: Fetch user's listened tracks with vectors, play counts, and feedback rewards
+        history_query = """
         MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(t:Track)
         WHERE t.embedding IS NOT NULL
-        OPTIONAL MATCH (u)-[f:FEEDBACK {reward: 1.0}]->(t)
-        RETURN t.name AS name, t.embedding AS embedding, coalesce(f.reward, 0.0) AS reward, l.play_count AS plays
-        ORDER BY reward DESC, plays DESC
-        LIMIT 5
+        OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+        OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+        OPTIONAL MATCH (u)-[f:FEEDBACK]->(t)
+        RETURN t.id AS id, t.name AS name, t.embedding AS embedding,
+               collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+               coalesce(l.play_count, 1) AS plays, coalesce(f.reward, 0.0) AS reward
         """
-        seed_rows = []
+        history = []
         try:
-            seed_rows = neo4j_conn.query(seed_query, {"user_id": user_id})
+            history = neo4j_conn.query(history_query, {"user_id": user_id})
         except Exception as e:
-            logger.warning(f"Failed to fetch seed embeddings for user {user_id}: {e}")
+            logger.warning(f"Failed to fetch listening history for user {user_id}: {e}")
 
-        if seed_rows and len(seed_rows) > 0:
-            # We have seed embeddings: take top seed vector
-            top_seed = seed_rows[0]
-            seed_vec = top_seed.get("embedding")
-            if seed_vec and len(seed_vec) == 768:
-                vector_hybrid_query = """
-                CALL db.index.vector.queryNodes('track_embeddings', 35, $seedVec)
+        # If user has history, compute multi-centroid taste personas
+        if history and len(history) > 0:
+            personas = PersonaClusterer.compute_taste_centroids(history, max_k=3)
+            logger.info(f"User {user_id}: computed {len(personas)} taste personas")
+
+            persona_candidates: Dict[str, List[Dict[str, Any]]] = {}
+            for persona in personas:
+                centroid_vec = persona.get("centroid")
+                if not centroid_vec or len(centroid_vec) != 768:
+                    continue
+
+                persona_query = """
+                CALL db.index.vector.queryNodes('track_embeddings', 20, $centroidVec)
                 YIELD node AS rec, score AS vector_score
                 MATCH (u:User {id: $user_id})
                 WHERE NOT (u)-[:LISTENED_TO]->(rec)
@@ -191,7 +201,7 @@ class GraphQueries:
                      count(DISTINCT seed) AS graph_affinity_count,
                      coalesce(f.reward, 0.0) AS feedback_reward
                 WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
-                     round((vector_score * 0.55) + (case when graph_affinity_count > 0 then 0.30 else 0.15 end) + (feedback_reward * 0.15), 2) AS final_score
+                     round(vector_score + (case when feedback_reward > 0 then 0.005 else 0.0 end) + (case when graph_affinity_count > 0 then 0.003 else 0.0 end), 3) AS final_score
                 RETURN DISTINCT
                     rec.id AS track_id,
                     rec.name AS track_name,
@@ -204,18 +214,80 @@ class GraphQueries:
                     rec.valence AS valence,
                     rec.danceability AS danceability,
                     case
-                      when anchor_track is not null then 'Connected to your ' + coalesce(anchor_source, 'music') + ' taste in ' + anchor_track + ' via 768-D semantic vector space'
-                      else 'High-affinity vector match (' + toString(toInteger(round(vector_score * 100))) + '%) across ' + coalesce(head(genres), 'core') + ' latent embeddings'
+                      when anchor_track is not null then 'Matches your ' + $personaLabel + ' persona bridging ' + anchor_track
+                      else 'Curated for your ' + $personaLabel + ' via 768-D multi-centroid latent space'
                     end AS reason
                 ORDER BY final_score DESC, popularity DESC
-                LIMIT $limit
+                LIMIT 8
                 """
                 try:
-                    records = neo4j_conn.query(vector_hybrid_query, {"user_id": user_id, "seedVec": seed_vec, "limit": limit})
-                    if records and len(records) > 0:
-                        return records
+                    p_recs = neo4j_conn.query(persona_query, {
+                        "user_id": user_id,
+                        "centroidVec": centroid_vec,
+                        "personaLabel": persona["label"]
+                    })
+                    if p_recs:
+                        persona_candidates[persona["id"]] = p_recs
                 except Exception as e:
-                    logger.warning(f"Vector hybrid query error: {e}")
+                    logger.warning(f"Error querying persona centroid {persona['id']}: {e}")
+
+            if persona_candidates:
+                # Round-robin interleave across all personas to ensure diverse representation
+                interleaved: List[Dict[str, Any]] = []
+                seen_track_ids = set()
+                max_depth = max(len(c) for c in persona_candidates.values())
+                persona_keys = list(persona_candidates.keys())
+
+                for depth in range(max_depth):
+                    for pkey in persona_keys:
+                        c_list = persona_candidates[pkey]
+                        if depth < len(c_list):
+                            cand = c_list[depth]
+                            tid = cand["track_id"]
+                            if tid not in seen_track_ids:
+                                seen_track_ids.add(tid)
+                                interleaved.append(cand)
+                                if len(interleaved) >= limit:
+                                    break
+                    if len(interleaved) >= limit:
+                        break
+
+                # Multi-Armed Bandit Exploration (inject serendipitous wildcards if capacity permits)
+                if len(interleaved) < limit:
+                    exploration_query = """
+                    MATCH (rec:Track)
+                    WHERE NOT EXISTS { MATCH (u:User {id: $user_id})-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+                      AND NOT EXISTS { MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(rec) }
+                    OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+                    OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+                    WITH rec, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres
+                    RETURN DISTINCT
+                        rec.id AS track_id,
+                        rec.name AS track_name,
+                        artists,
+                        genres,
+                        rec.source AS source,
+                        0.78 AS score,
+                        coalesce(rec.popularity, 50) AS popularity,
+                        rec.energy AS energy,
+                        rec.valence AS valence,
+                        rec.danceability AS danceability,
+                        '✨ Serendipity Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
+                    ORDER BY popularity DESC
+                    LIMIT $remLimit
+                    """
+                    try:
+                        rem_limit = limit - len(interleaved)
+                        wildcards = neo4j_conn.query(exploration_query, {"user_id": user_id, "remLimit": rem_limit})
+                        for w in wildcards:
+                            if w["track_id"] not in seen_track_ids:
+                                seen_track_ids.add(w["track_id"])
+                                interleaved.append(w)
+                    except Exception as e:
+                        logger.warning(f"Exploration query error: {e}")
+
+                if interleaved:
+                    return interleaved[:limit]
 
         # Fallback 1: SIMILAR_TO graph traversal
         sim_query = """
@@ -291,12 +363,14 @@ class GraphQueries:
     @staticmethod
     def mood_chat(user_id: str, prompt: str) -> Dict[str, Any]:
         """
-        Native Hybrid GraphRAG Mood Assistant:
-        1. Encodes prompt into 768-dim semantic vector via Gemini embeddings (gemini-embedding-001)
-        2. Performs HNSW cosine similarity search over Neo4j vector index 'track_embeddings'
-        3. Reranks with user graph topology (artist/genre clusters) and RLHF feedback rewards
-        4. Saves query node (:MoodQuery) for persistent memory
-        5. Formats rich interactive card payload with Spotify/YouTube play links
+        Native Hybrid GraphRAG Mood Assistant with Autonomous Dynamic Frontier Expansion:
+        1. Encodes prompt into 768-dim semantic vector via Gemini embeddings.
+        2. Performs HNSW cosine similarity search over Neo4j vector index 'track_embeddings'.
+        3. Dynamic Frontier Expansion: If top match < 0.77 or low density, autonomously queries live APIs,
+           embeds fresh tracks, and ingests them into Neo4j in real time.
+        4. Reranks with user graph topology and RLHF feedback rewards.
+        5. Saves query node (:MoodQuery) for persistent context.
+        6. Formats rich interactive card payload with Spotify/YouTube play links.
         """
         # Save session query node
         try:
@@ -335,7 +409,6 @@ class GraphQueries:
                  count(DISTINCT seed) AS graph_affinity_count,
                  coalesce(f.reward, 0.0) AS feedback_reward
             WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
-                 // Prompt semantic cosine is primary! Subtle tie-breakers for liked & library affinity
                  round(vector_score + (case when feedback_reward > 0 then 0.005 else 0.0 end) + (case when graph_affinity_count > 0 then 0.003 else 0.0 end), 3) AS final_score
             RETURN DISTINCT
                 rec.id AS track_id,
@@ -363,6 +436,25 @@ class GraphQueries:
                 })
             except Exception as e:
                 logger.error(f"Error querying vector index in mood_chat: {e}")
+
+            # Step 3: Dynamic Frontier Expansion
+            # If top match similarity is low (< 0.77) OR fewer than 4 candidates returned,
+            # dynamically expand catalog from live web APIs (YouTube Music / Spotify)
+            top_score = results[0]["score"] if results else 0.0
+            if top_score < 0.77 or len(results) < 4:
+                try:
+                    logger.info(f"Top match score ({top_score}) below 0.77. Expanding frontier for: \"{prompt}\"")
+                    frontier_tracks = FrontierFetcher.expand_frontier_for_prompt(prompt, user_id=user_id, limit=4)
+                    if frontier_tracks:
+                        fresh_results = neo4j_conn.query(vibe_vector_query, {
+                            "user_id": user_id,
+                            "prompt": prompt,
+                            "queryVec": query_vec
+                        })
+                        if fresh_results:
+                            results = fresh_results
+                except Exception as e:
+                    logger.warning(f"Dynamic Frontier Expansion error: {e}")
 
         # Graceful fallback if vector search yielded empty
         if not results:
