@@ -38,9 +38,29 @@ export const useStore = create((set, get) => ({
     }
   ],
   isChatLoading: false,
+  dynamicSuggestions: [],
 
-  toggleChat: () => set((state) => ({ isChatOpen: !state.isChatOpen })),
+  toggleChat: () => {
+    const next = !get().isChatOpen;
+    set({ isChatOpen: next });
+    if (next) {
+      get().fetchDynamicSuggestions();
+    }
+  },
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  fetchDynamicSuggestions: async () => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.get(`${API_BASE}/vibe/suggestions?user_id=${encodeURIComponent(uid)}`);
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        set({ dynamicSuggestions: res.data });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch dynamic suggestions:', e);
+    }
+  },
 
   fetchLibrary: async () => {
     try {
@@ -201,6 +221,7 @@ export const useStore = create((set, get) => ({
     await get().fetchLibrary();
     await get().fetchTopArtists();
     await get().fetchGraphData();
+    await get().fetchDynamicSuggestions();
   },
 
   fetchStats: async () => {

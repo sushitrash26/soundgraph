@@ -10,7 +10,16 @@ const SUGGESTIONS = [
 ];
 
 export default function MoodChatModal() {
-  const { isChatOpen, toggleChat, chatMessages, isChatLoading, sendChatPrompt, sendImageVibe } = useStore();
+  const { 
+    isChatOpen, 
+    toggleChat, 
+    chatMessages, 
+    isChatLoading, 
+    sendChatPrompt, 
+    sendImageVibe,
+    dynamicSuggestions,
+    fetchDynamicSuggestions
+  } = useStore();
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [imageMime, setImageMime] = useState('image/jpeg');
@@ -20,6 +29,9 @@ export default function MoodChatModal() {
   useEffect(() => {
     if (isChatOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (!dynamicSuggestions || dynamicSuggestions.length === 0) {
+        fetchDynamicSuggestions();
+      }
     }
   }, [chatMessages, isChatOpen]);
 
@@ -285,7 +297,7 @@ export default function MoodChatModal() {
           whiteSpace: 'nowrap',
           borderTop: '1px solid rgba(255, 255, 255, 0.04)'
         }}>
-          {SUGGESTIONS.map((s, i) => (
+          {(dynamicSuggestions && dynamicSuggestions.length > 0 ? dynamicSuggestions : SUGGESTIONS).map((s, i) => (
             <button
               key={i}
               onClick={() => handleSuggestion(s)}

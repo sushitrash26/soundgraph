@@ -20,4 +20,6 @@ class Track(BaseModel):
     duration_ms: Optional[int] = None
     popularity: Optional[int] = None
     play_count: Optional[int] = 1
+    cover_url: Optional[str] = None
+    embedding: Optional[List[float]] = None
     features: Optional[AudioFeatures] = None

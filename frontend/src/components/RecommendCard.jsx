@@ -13,6 +13,11 @@ export default function RecommendCard({ item }) {
   };
 
   const isCurrentExplanation = isSelected && explanation;
+  const rawId = item.track_id || item.id || '';
+  let thumb = item.cover_url;
+  if (!thumb && rawId.includes('youtube:video:')) {
+    thumb = `https://img.youtube.com/vi/${rawId.replace('youtube:video:', '')}/hqdefault.jpg`;
+  }
 
   return (
     <div 
@@ -27,6 +32,21 @@ export default function RecommendCard({ item }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+        {thumb && (
+          <img
+            src={thumb}
+            alt={item.track_name}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '10px',
+              objectFit: 'cover',
+              border: '1px solid rgba(255,255,255,0.1)',
+              flexShrink: 0
+            }}
+          />
+        )}
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
             <span className={`badge ${item.source === 'spotify' ? 'badge-spotify' : 'badge-youtube'}`}>

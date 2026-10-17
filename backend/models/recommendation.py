@@ -9,6 +9,8 @@ class RecommendationItem(BaseModel):
     score: float
     reason: str
     genres: List[str] = Field(default_factory=list)
+    cover_url: Optional[str] = None
+    transition_flow: Optional[str] = None
     energy: Optional[float] = None
     valence: Optional[float] = None
     danceability: Optional[float] = None

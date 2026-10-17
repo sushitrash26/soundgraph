@@ -54,24 +54,16 @@ class FrontierFetcher:
                 if not artists:
                     artists = ["Featured Artist"]
 
-                # Infer genre hints from prompt or artist
-                genre_hints = [g.strip().lower() for g in prompt.split() if len(g) > 3][:3]
-                if not genre_hints:
-                    genre_hints = ["global", "discovery"]
-
                 raw_candidates.append({
                     "id": track_id,
                     "name": title,
                     "artists": artists,
                     "source": "youtube",
                     "album": item.get("album", {}).get("name", "Single"),
+                    "cover_url": f"https://img.youtube.com/vi/{vid}/hqdefault.jpg",
                     "popularity": 75,
-                    "features": {
-                        "energy": 0.65,
-                        "valence": 0.55,
-                        "danceability": 0.60
-                    },
-                    "genres": genre_hints
+                    "features": {},
+                    "genres": []
                 })
 
                 if len(raw_candidates) >= limit:
@@ -84,11 +76,17 @@ class FrontierFetcher:
             logger.warning(f"No new frontier candidates found for prompt: \"{prompt}\"")
             return []
 
-        # Generate Gemini 768-D embeddings for new tracks
+        # Generate Gemini 768-D embeddings and derive real acoustic features & genres
         try:
             emb_map = GeminiEmbedder.embed_tracks_batch_sync(raw_candidates)
             for item in raw_candidates:
-                item["embedding"] = emb_map.get(item["id"])
+                vec = emb_map.get(item["id"])
+                item["embedding"] = vec
+                if vec:
+                    # AI-derived acoustic features via semantic differential axis projection
+                    item["features"] = GeminiEmbedder.infer_acoustic_features_from_embedding(vec)
+                    # Zero-shot semantic genre classification via 768-D canonical anchor projection
+                    item["genres"] = GeminiEmbedder.infer_genres_from_embedding(vec, top_k=3)
         except Exception as e:
             logger.error(f"Error embedding frontier tracks: {e}")
 

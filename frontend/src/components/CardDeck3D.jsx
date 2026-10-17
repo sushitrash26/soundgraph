@@ -149,8 +149,26 @@ export default function CardDeck3D() {
       }}>
         {activeCards.map((card, i) => {
           const isTop = i === 0;
-          const coverImg = COVERS[(currentIndex + i) % COVERS.length];
           const isSpotify = card.source !== 'youtube';
+          const rawId = card.track_id || card.id || '';
+
+          // Authentic dynamic cover art (YouTube official thumbnail or track cover_url)
+          let coverImg = card.cover_url || card.image_url;
+          if (!coverImg && rawId.includes('youtube:video:')) {
+            const vid = rawId.replace('youtube:video:', '');
+            coverImg = `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
+          } else if (!coverImg && !isSpotify && rawId) {
+            coverImg = `https://img.youtube.com/vi/${rawId}/hqdefault.jpg`;
+          }
+          if (!coverImg) {
+            const palettes = [
+              'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&auto=format&fit=crop&q=80',
+              'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+            ];
+            const hash = (card.track_name || card.name || '').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            coverImg = palettes[hash % palettes.length];
+          }
 
           // 3D Stack offsets
           const translateY = i * 16;
@@ -199,6 +217,9 @@ export default function CardDeck3D() {
                 <img 
                   src={coverImg} 
                   alt={card.track_name || card.name}
+                  onError={(e) => {
+                    e.currentTarget.src = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80';
+                  }}
                   style={{
                     width: '100%',
                     height: '100%',

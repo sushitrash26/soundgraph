@@ -37,12 +37,14 @@ class GraphLoader:
             t.acousticness = item.acousticness,
             t.instrumentalness = item.instrumentalness,
             t.embedding = item.embedding,
+            t.cover_url = item.cover_url,
             t.created_at = datetime()
         ON MATCH SET
             t.energy = coalesce(item.energy, t.energy),
             t.valence = coalesce(item.valence, t.valence),
             t.danceability = coalesce(item.danceability, t.danceability),
             t.popularity = coalesce(item.popularity, t.popularity),
+            t.cover_url = coalesce(item.cover_url, t.cover_url),
             t.embedding = coalesce(item.embedding, t.embedding)
 
         // 2. User LISTENED_TO Track
@@ -138,9 +140,11 @@ class GraphLoader:
             t.valence = item.valence,
             t.danceability = item.danceability,
             t.embedding = item.embedding,
+            t.cover_url = item.cover_url,
             t.created_at = datetime()
         ON MATCH SET
             t.embedding = coalesce(item.embedding, t.embedding),
+            t.cover_url = coalesce(item.cover_url, t.cover_url),
             t.popularity = coalesce(item.popularity, t.popularity)
 
         // Connect Artists
@@ -162,17 +166,20 @@ class GraphLoader:
         cleaned_batch = []
         for tr in tracks:
             features = tr.get("features") or {}
+            vid = tr['id'].replace('youtube:video:', '')
+            cover_url = tr.get("cover_url") or (f"https://img.youtube.com/vi/{vid}/hqdefault.jpg" if "youtube:video:" in tr["id"] else "")
             cleaned_batch.append({
                 "id": tr["id"],
                 "name": tr.get("name") or tr.get("title") or "Unknown Track",
                 "source": tr.get("source", "youtube"),
-                "uri": tr.get("uri") or f"https://music.youtube.com/watch?v={tr['id'].replace('youtube:video:', '')}",
+                "uri": tr.get("uri") or f"https://music.youtube.com/watch?v={vid}",
                 "popularity": tr.get("popularity", 75),
-                "energy": features.get("energy", 0.65),
-                "valence": features.get("valence", 0.55),
-                "danceability": features.get("danceability", 0.60),
+                "energy": features.get("energy", 0.50),
+                "valence": features.get("valence", 0.50),
+                "danceability": features.get("danceability", 0.50),
+                "cover_url": cover_url,
                 "artists": tr.get("artists") or ["Artist"],
-                "genres": tr.get("genres") or ["discovery"],
+                "genres": tr.get("genres") or ["music"],
                 "embedding": tr.get("embedding")
             })
         try:

@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from ytmusicapi import YTMusic
 from backend.core.logger import logger
 from backend.ingestors.base import BaseIngestor
+from backend.embeddings.gemini_embedder import GeminiEmbedder
 
 class YouTubeMusicIngestor(BaseIngestor):
     def __init__(self, auth_headers: Optional[Dict[str, Any]] = None):
@@ -101,25 +102,34 @@ class YouTubeMusicIngestor(BaseIngestor):
             return []
 
     def _normalize_yt_track(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        vid = item.get("videoId")
         artists = [a.get("name") for a in item.get("artists", []) if a.get("name")]
         album_name = item.get("album", {}).get("name") if item.get("album") else ""
+        title = item.get("title", "Unknown Video")
+
+        cover_url = f"https://img.youtube.com/vi/{vid}/hqdefault.jpg" if vid else ""
+
+        # Zero-shot AI genre & acoustic feature derivation via Gemini-2
+        vec = GeminiEmbedder.embed_text_sync(f"Track: {title}. Artists: {', '.join(artists)}. Album: {album_name}")
+        if vec:
+            genres = GeminiEmbedder.infer_genres_from_embedding(vec, top_k=3)
+            features = GeminiEmbedder.infer_acoustic_features_from_embedding(vec)
+        else:
+            genres = ["music"]
+            features = {"energy": 0.50, "valence": 0.50, "danceability": 0.50, "acousticness": 0.30}
+
         return {
-            "id": f"youtube:video:{item['videoId']}",
-            "name": item.get("title", "Unknown Video"),
+            "id": f"youtube:video:{vid}",
+            "name": title,
             "artists": artists,
             "album": album_name,
-            "genres": ["ambient", "lo-fi", "chill"],
+            "genres": genres,
             "source": "youtube",
-            "uri": f"https://music.youtube.com/watch?v={item['videoId']}",
+            "cover_url": cover_url,
+            "uri": f"https://music.youtube.com/watch?v={vid}",
             "duration_ms": item.get("duration_seconds", 0) * 1000 if item.get("duration_seconds") else 0,
             "popularity": 70,
             "play_count": 1,
-            "features": {
-                "energy": 0.65,
-                "valence": 0.60,
-                "danceability": 0.65,
-                "tempo": 115.0,
-                "acousticness": 0.25,
-                "instrumentalness": 0.10
-            }
+            "embedding": vec,
+            "features": features
         }

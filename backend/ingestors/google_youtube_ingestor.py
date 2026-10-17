@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from backend.core.config import settings
 from backend.core.logger import logger
 from backend.ingestors.base import BaseIngestor
+from backend.embeddings.gemini_embedder import GeminiEmbedder
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -207,16 +208,18 @@ class GoogleYouTubeIngestor(BaseIngestor):
             artist = parts[0].strip()
             song_name = parts[1].strip()
 
-        # Determine genre keywords
-        genres = ["electronic", "pop", "hip hop", "rock", "indie"]
-        topic_cats = video_item.get("topicDetails", {}).get("topicCategories", [])
-        extracted_genres = []
-        for tc in topic_cats:
-            slug = tc.split("/")[-1].replace("_music", "").replace("_", " ").lower()
-            if slug and slug != "music":
-                extracted_genres.append(slug)
-        if not extracted_genres:
-            extracted_genres = ["pop", "hip hop", "electronic"]
+        cover_url = f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
+
+        # AI-driven feature & genre derivation via Gemini-2
+        vec = GeminiEmbedder.embed_text_sync(f"Track: {song_name}. Artists: {artist}. YouTube Music")
+        if vec:
+            if not extracted_genres:
+                extracted_genres = GeminiEmbedder.infer_genres_from_embedding(vec, top_k=3)
+            features = GeminiEmbedder.infer_acoustic_features_from_embedding(vec)
+        else:
+            if not extracted_genres:
+                extracted_genres = ["music"]
+            features = {"energy": 0.50, "valence": 0.50, "danceability": 0.50, "acousticness": 0.20}
 
         return {
             "id": f"youtube:video:{vid}",
@@ -225,15 +228,10 @@ class GoogleYouTubeIngestor(BaseIngestor):
             "album": "YouTube Music",
             "genres": extracted_genres,
             "source": "youtube",
+            "cover_url": cover_url,
             "uri": f"https://music.youtube.com/watch?v={vid}",
             "popularity": 80,
             "play_count": 3,
-            "features": {
-                "energy": 0.72,
-                "valence": 0.60,
-                "danceability": 0.68,
-                "tempo": 120.0,
-                "acousticness": 0.20,
-                "instrumentalness": 0.05
-            }
+            "embedding": vec,
+            "features": features
         }

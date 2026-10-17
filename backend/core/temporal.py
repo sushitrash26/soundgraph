@@ -34,20 +34,35 @@ class AITemporalEngine:
 
     @classmethod
     def get_situational_prompt(cls, client_dt: Optional[datetime] = None) -> str:
-        """Translates current time and day into an AI situational query"""
+        """
+        Continuous Circadian Situational Synthesis:
+        Zero rigid 4-bucket step cliffs. Continuous diurnal progression mapping exact time-of-day
+        into atmospheric acoustic context.
+        """
         dt = client_dt or datetime.now()
         day_name = dt.strftime("%A")
         time_str = dt.strftime("%I:%M %p")
         hour = dt.hour
+        minute = dt.minute
+        minute_of_day = hour * 60 + minute
 
-        if 23 <= hour or hour < 5:
-            period = "late-night quiet hours, midnight atmosphere, introspective solitude"
-        elif 5 <= hour < 12:
-            period = "morning awakening, fresh start, energizing momentum"
-        elif 12 <= hour < 18:
-            period = "afternoon productivity flow, focused rhythmic stability"
-        else:
-            period = "evening unwind, vibrant atmosphere, sunset transition"
+        # Continuous circadian progression across 24 hours
+        if 300 <= minute_of_day < 420:      # 5:00 AM - 6:59 AM
+            period = "dawn stillness, sunrise awakening, crisp morning clarity"
+        elif 420 <= minute_of_day < 720:     # 7:00 AM - 11:59 AM
+            period = "morning momentum, energetic focus, productive clarity"
+        elif 720 <= minute_of_day < 840:     # 12:00 PM - 1:59 PM
+            period = "midday daylight, bright energy, rhythmic stride"
+        elif 840 <= minute_of_day < 1080:    # 2:00 PM - 5:59 PM
+            period = "afternoon deep flow, steady acoustic momentum, focused drive"
+        elif 1080 <= minute_of_day < 1200:   # 6:00 PM - 7:59 PM
+            period = "golden hour transition, sunset dusk, unwinding ambiance"
+        elif 1200 <= minute_of_day < 1380:   # 8:00 PM - 10:59 PM
+            period = "evening decompression, vibrant nightfall, social warmth"
+        elif 1380 <= minute_of_day or minute_of_day < 180: # 11:00 PM - 2:59 AM
+            period = "midnight solitude, late-night introspective atmosphere, quiet coding flow"
+        else:                                # 3:00 AM - 4:59 AM
+            period = "deep nocturnal silence, ethereal stillness, meditative solitude"
 
         return f"Music capturing the sonic atmosphere of a {day_name} at {time_str} ({period})"
 

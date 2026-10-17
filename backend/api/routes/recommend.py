@@ -49,6 +49,10 @@ def visual_vibe_search(payload: ImageVibeRequest):
         text_hint=payload.text_hint
     )
 
+@router.get("/vibe/suggestions")
+def get_vibe_suggestions(user_id: str = "astitva_demo_user"):
+    return GraphQueries.get_dynamic_suggestions(user_id=user_id)
+
 @router.get("/recommendations/explain/{track_id:path}")
 def explain_recommendation(track_id: str, user_id: str = "astitva_demo_user"):
     return GraphQueries.explain_recommendation(user_id=user_id, track_id=track_id)

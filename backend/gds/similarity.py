@@ -33,20 +33,22 @@ class GDSSimilarity:
                 return result
         except Exception as e:
             logger.error(f"GDS NodeSimilarity failed: {e}")
-            # Fallback Cypher based similarity linking if GDS projection has disconnected components
+            # Vector-driven similarity linking using true 768-D Gemini embeddings
             fallback_sim_query = """
-            MATCH (t1:Track)-[:IN_GENRE]->(g:Genre)<-[:IN_GENRE]-(t2:Track)
-            WHERE id(t1) < id(t2)
-            WITH t1, t2, count(DISTINCT g) AS common_genres
-            WHERE common_genres >= 1
+            MATCH (t1:Track), (t2:Track)
+            WHERE elementId(t1) < elementId(t2)
+              AND t1.embedding IS NOT NULL
+              AND t2.embedding IS NOT NULL
+            WITH t1, t2, vector.similarity.cosine(t1.embedding, t2.embedding) AS cos_sim
+            WHERE cos_sim >= 0.72
             MERGE (t1)-[r:SIMILAR_TO]->(t2)
-            ON CREATE SET r.score = round(0.50 + (common_genres * 0.15), 2)
+            SET r.score = round(cos_sim, 3)
             MERGE (t2)-[r2:SIMILAR_TO]->(t1)
-            ON CREATE SET r2.score = round(0.50 + (common_genres * 0.15), 2)
+            SET r2.score = round(cos_sim, 3)
             RETURN count(r) AS relationshipsWritten
             """
-            logger.info("Executing Cypher-based semantic neighborhood similarity fallback...")
+            logger.info("Executing vector-driven latent similarity fallback...")
             fb_res = neo4j_conn.query(fallback_sim_query)
             count = fb_res[0]["relationshipsWritten"] if fb_res else 0
-            return {"relationshipsWritten": count, "mode": "heuristic_fallback"}
+            return {"relationshipsWritten": count, "mode": "vector_cosine_fallback"}
         return {}

@@ -78,6 +78,13 @@ class PersonaClusterer:
                 ])
                 member_vecs = np.array([t["embedding"] for t in cluster_members])
                 centroid = np.average(member_vecs, axis=0, weights=member_weights)
+
+                # Rocchio Vector Feedback Repulsion: steer centroid away from negatively rated tracks
+                disliked_vecs = [t["embedding"] for t in cluster_members if float(t.get("reward", 0.0)) < 0]
+                if disliked_vecs:
+                    neg_repulsion = np.mean(disliked_vecs, axis=0)
+                    centroid = centroid - (0.30 * neg_repulsion)
+
                 norm = np.linalg.norm(centroid)
                 if norm > 0:
                     centroid = centroid / norm
