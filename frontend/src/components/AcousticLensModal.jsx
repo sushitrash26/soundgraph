@@ -133,6 +133,9 @@ export default function AcousticLensModal({ isOpen, onClose }) {
         if (res.data && res.data.status === 'success') {
           setResult(res.data);
           setState('result');
+        } else if (res.data && res.data.status === 'unrecognized') {
+          setErrorMessage(res.data.message || 'We could not pick up singing or lyrics clearly. Try singing a bit louder or closer to the mic!');
+          setState('error');
         } else {
           setErrorMessage(res.data?.message || 'Could not resolve matching sonic identity.');
           setState('error');
@@ -322,7 +325,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
               }}>
                 <Radio size={28} color="#c084fc" className="pulse" />
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff', marginTop: '6px' }}>
-                  {(6.0 - recordingDuration).toFixed(1)}s
+                  {(7.5 - recordingDuration).toFixed(1)}s
                 </div>
               </div>
             </div>
@@ -368,7 +371,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
               Resolving Sonic Identity...
             </div>
             <div style={{ color: '#38bdf8', fontSize: '13px', marginTop: '8px' }}>
-              Transcribing lyrics with Gemini 2.0 & querying live YouTube video index
+              Listening & transcribing lyrics with Gemini Audio Intelligence and querying live YouTube music index
             </div>
           </div>
         )}
@@ -551,18 +554,56 @@ export default function AcousticLensModal({ isOpen, onClose }) {
         )}
 
         {state === 'error' && (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <AlertCircle size={40} color="#f87171" style={{ marginBottom: '12px' }} />
             <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#fff', marginBottom: '6px' }}>
               Recognition Inconclusive
             </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              {errorMessage || micError || 'Could not pick up distinct audio frequencies. Try playing the sound louder or closer to your mic.'}
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '18px', lineHeight: '1.4' }}>
+              {errorMessage || micError || 'Could not pick up distinct vocal lyrics or melody.'}
             </p>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '12px 16px',
+              textAlign: 'left',
+              fontSize: '12px',
+              color: 'var(--text-dim)',
+              marginBottom: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div>🎤 <strong>Sing a phrase or hook</strong> clearly into your microphone</div>
+              <div>🎵 <strong>Hum the melody</strong> with steady rhythm</div>
+              <div>💬 <strong>Add an optional hint</strong> below (e.g. artist or words you remember)</div>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Optional hint: e.g. 'Arctic Monkeys' or 'Bollywood romantic'"
+              value={hint}
+              onChange={(e) => setHint(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                borderRadius: '12px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                color: '#fff',
+                fontSize: '12.5px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                marginBottom: '16px'
+              }}
+            />
+
             <button
               onClick={handleStart}
               className="btn-primary"
-              style={{ padding: '10px 24px', fontSize: '13px' }}
+              style={{ padding: '10px 28px', fontSize: '13px' }}
             >
               Try Again
             </button>

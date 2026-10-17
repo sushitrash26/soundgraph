@@ -23,8 +23,9 @@ export function useAudioRecorder() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
-          noiseSuppression: false,
+          noiseSuppression: true,
           autoGainControl: true,
+          channelCount: 1,
         }
       });
       streamRef.current = stream;
@@ -70,8 +71,8 @@ export function useAudioRecorder() {
       const startTimestamp = Date.now();
       timerRef.current = setInterval(() => {
         const elapsed = (Date.now() - startTimestamp) / 1000;
-        setRecordingDuration(Math.min(elapsed, 6.0));
-        if (elapsed >= 6.0) {
+        setRecordingDuration(Math.min(elapsed, 7.5));
+        if (elapsed >= 7.5) {
           stopRecording();
         }
       }, 100);
