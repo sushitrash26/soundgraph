@@ -35,6 +35,11 @@ export default function RecommendCard({ item }) {
             <span className="badge badge-score">
               {Math.round((item.score || 0.85) * 100)}% Match
             </span>
+            {item.transition_flow && (
+              <span className="badge" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#38bdf8', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
+                🌊 {item.transition_flow}
+              </span>
+            )}
           </div>
 
           <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#fff', marginBottom: '4px' }}>

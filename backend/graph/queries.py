@@ -4,6 +4,8 @@ from backend.core.logger import logger
 from backend.embeddings.gemini_embedder import GeminiEmbedder
 from backend.embeddings.persona_clusterer import PersonaClusterer
 from backend.ingestors.frontier_fetcher import FrontierFetcher
+from backend.audio.flow_chainer import AIFlowChainer
+from backend.core.temporal import AITemporalEngine
 
 class GraphQueries:
     @staticmethod
@@ -205,6 +207,7 @@ class GraphQueries:
                 RETURN DISTINCT
                     rec.id AS track_id,
                     rec.name AS track_name,
+                    rec.embedding AS embedding,
                     artists,
                     genres,
                     rec.source AS source,
@@ -287,7 +290,10 @@ class GraphQueries:
                         logger.warning(f"Exploration query error: {e}")
 
                 if interleaved:
-                    return interleaved[:limit]
+                    flow_chained = AIFlowChainer.chain_session_flow(interleaved[:limit])
+                    for item in flow_chained:
+                        item.pop("embedding", None)
+                    return flow_chained
 
         # Fallback 1: SIMILAR_TO graph traversal
         sim_query = """
@@ -413,6 +419,7 @@ class GraphQueries:
             RETURN DISTINCT
                 rec.id AS track_id,
                 rec.name AS track_name,
+                rec.embedding AS embedding,
                 artists,
                 genres,
                 rec.source AS source,
@@ -460,6 +467,11 @@ class GraphQueries:
         if not results:
             results = GraphQueries.get_recommendations(user_id=user_id, limit=6)
 
+        # AI Flow Chaining for continuous DJ-like progression
+        results = AIFlowChainer.chain_session_flow(results)
+        for item in results:
+            item.pop("embedding", None)
+
         preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:4]]
         preview_list = " • " + "\n • ".join(preview_titles) if preview_titles else ""
 
@@ -467,6 +479,114 @@ class GraphQueries:
             f"Here are top-tier recommendations for \"{prompt}\" retrieved via Gemini 768-D vector embeddings & Neo4j graph topology:\n\n"
             f"{preview_list}\n\n"
             f"I have also loaded these candidates directly into your 3D Smart Deck so you can swipe, like, or inspect their graph paths."
+        )
+
+        return {
+            "message": explanation_msg,
+            "cards": results
+        }
+
+    @staticmethod
+    def visual_vibe_search(user_id: str, image_base64: str, mime_type: str = "image/jpeg", text_hint: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Multimodal Visual Vibe Discovery:
+        Maps aesthetic images (album art, moodboards, photography) directly into the shared 768-D Gemini-2
+        latent audio space and retrieves topologically harmonized music.
+        """
+        import base64
+        try:
+            # Handle possible data URL prefix (e.g. data:image/png;base64,...)
+            if "," in image_base64:
+                header, raw_b64 = image_base64.split(",", 1)
+                if "image/" in header:
+                    mime_type = header.split(";")[0].replace("data:", "")
+                img_bytes = base64.b64decode(raw_b64)
+            else:
+                img_bytes = base64.b64decode(image_base64)
+        except Exception as e:
+            logger.error(f"Failed to decode base64 image: {e}")
+            return {"message": "Invalid image payload.", "cards": []}
+
+        # Step 1: Joint multimodal embedding via models/gemini-embedding-2
+        query_vec = GeminiEmbedder.embed_multimodal_sync(text=text_hint, image_bytes=img_bytes, mime_type=mime_type)
+        if not query_vec or len(query_vec) != 768:
+            logger.warning("Failed to generate multimodal embedding from image.")
+            return {"message": "Could not extract visual vibe embedding from image.", "cards": []}
+
+        # Step 2: Query Neo4j vector index
+        visual_query = """
+        CALL db.index.vector.queryNodes('track_embeddings', 25, $queryVec)
+        YIELD node AS rec, score AS vector_score
+        MATCH (u:User {id: $user_id})
+        WHERE NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+        OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+        OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+        OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
+        OPTIONAL MATCH (u)-[:LISTENED_TO]->(seed:Track)-[:BY|IN_GENRE*1..2]-(rec)
+        WITH rec, vector_score,
+             collect(DISTINCT a.name) AS artists,
+             collect(DISTINCT g.name) AS genres,
+             head(collect(DISTINCT seed.name)) AS anchor_track,
+             head(collect(DISTINCT seed.source)) AS anchor_source,
+             count(DISTINCT seed) AS graph_affinity_count,
+             coalesce(f.reward, 0.0) AS feedback_reward
+        WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
+             round(vector_score + (case when feedback_reward > 0 then 0.005 else 0.0 end) + (case when graph_affinity_count > 0 then 0.003 else 0.0 end), 3) AS final_score
+        RETURN DISTINCT
+            rec.id AS track_id,
+            rec.name AS track_name,
+            rec.embedding AS embedding,
+            artists,
+            genres,
+            rec.source AS source,
+            final_score AS score,
+            coalesce(rec.popularity, 50) AS popularity,
+            rec.energy AS energy,
+            rec.valence AS valence,
+            rec.danceability AS danceability,
+            'Visual Vibe match (' + toString(toInteger(round(vector_score * 100))) + '%) from image aesthetics via Gemini-2 multimodal latent space' AS reason
+        ORDER BY final_score DESC, popularity DESC
+        LIMIT 6
+        """
+        results = []
+        try:
+            results = neo4j_conn.query(visual_query, {
+                "user_id": user_id,
+                "queryVec": query_vec
+            })
+        except Exception as e:
+            logger.error(f"Error executing visual vibe vector query: {e}")
+
+        # Step 3: Dynamic Frontier Expansion fallback if matches are weak and hint is present
+        top_score = results[0]["score"] if results else 0.0
+        if (top_score < 0.77 or len(results) < 4) and text_hint:
+            try:
+                FrontierFetcher.expand_frontier_for_prompt(text_hint, user_id=user_id, limit=4)
+                fresh_results = neo4j_conn.query(visual_query, {
+                    "user_id": user_id,
+                    "queryVec": query_vec
+                })
+                if fresh_results:
+                    results = fresh_results
+            except Exception as e:
+                logger.warning(f"Frontier expansion error in visual vibe: {e}")
+
+        if not results:
+            results = GraphQueries.get_recommendations(user_id=user_id, limit=6)
+
+        # Step 4: AI Flow Chaining
+        results = AIFlowChainer.chain_session_flow(results)
+        for item in results:
+            item.pop("embedding", None)
+
+        preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:4]]
+        preview_list = " • " + "\n • ".join(preview_titles) if preview_titles else ""
+
+        hint_label = f" (mood hint: \"{text_hint}\")" if text_hint else ""
+        explanation_msg = (
+            f"Analyzed your image's visual aesthetics & color atmosphere{hint_label} with **Gemini-2 Multimodal Embeddings**:\n\n"
+            f"{preview_list}\n\n"
+            f"Chained into your 3D Smart Deck with harmonic flow continuity."
         )
 
         return {

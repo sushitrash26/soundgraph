@@ -108,6 +108,48 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  sendImageVibe: async (imageBase64, mimeType = 'image/jpeg', textHint = '') => {
+    if (!imageBase64) return;
+    const userMsg = {
+      role: 'user',
+      text: textHint ? `[Visual Vibe] ${textHint}` : '[Visual Vibe] Matching visual aesthetic...',
+      image: imageBase64
+    };
+    set((state) => ({
+      chatMessages: [...state.chatMessages, userMsg],
+      isChatLoading: true
+    }));
+
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.post(`${API_BASE}/vibe/image`, {
+        user_id: uid,
+        image_base64: imageBase64,
+        mime_type: mimeType,
+        text_hint: textHint || null
+      });
+
+      const assistantMsg = {
+        role: 'assistant',
+        text: res.data.message || 'Discovered tracks matching your visual atmosphere.',
+        cards: res.data.cards || []
+      };
+
+      set((state) => ({
+        chatMessages: [...state.chatMessages, assistantMsg],
+        recommendations: res.data.cards && res.data.cards.length > 0 ? res.data.cards : state.recommendations,
+        isChatLoading: false
+      }));
+    } catch (e) {
+      console.error('Error in sendImageVibe:', e);
+      set((state) => ({
+        chatMessages: [...state.chatMessages, { role: 'assistant', text: 'Error analyzing visual vibe. Please try another image.' }],
+        isChatLoading: false
+      }));
+    }
+  },
+
   checkAuth: async () => {
     try {
       const res = await axios.get(`${API_BASE}/auth/me`);

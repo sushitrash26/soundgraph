@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { X, Send, Sparkles, MessageSquare, Loader2 } from 'lucide-react';
+import { X, Send, Sparkles, MessageSquare, Loader2, Image as ImageIcon } from 'lucide-react';
 
 const SUGGESTIONS = [
   'Late night synthwave for coding',
@@ -10,8 +10,11 @@ const SUGGESTIONS = [
 ];
 
 export default function MoodChatModal() {
-  const { isChatOpen, toggleChat, chatMessages, isChatLoading, sendChatPrompt } = useStore();
+  const { isChatOpen, toggleChat, chatMessages, isChatLoading, sendChatPrompt, sendImageVibe } = useStore();
   const [input, setInput] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imageMime, setImageMime] = useState('image/jpeg');
+  const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -22,12 +25,37 @@ export default function MoodChatModal() {
 
   if (!isChatOpen) return null;
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const mime = file.type || 'image/jpeg';
+    setImageMime(mime);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearImage = () => {
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim() || isChatLoading) return;
-    const q = input;
+    if ((!input.trim() && !selectedImage) || isChatLoading) return;
+    const q = input.trim();
+    const img = selectedImage;
+    const mime = imageMime;
     setInput('');
-    await sendChatPrompt(q);
+    handleClearImage();
+
+    if (img) {
+      await sendImageVibe(img, mime, q);
+    } else {
+      await sendChatPrompt(q);
+    }
   };
 
   const handleSuggestion = async (s) => {
@@ -144,6 +172,21 @@ export default function MoodChatModal() {
                   lineHeight: '1.55',
                   boxShadow: isUser ? '0 4px 16px rgba(168, 85, 247, 0.25)' : 'none'
                 }}>
+                  {msg.image && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <img
+                        src={msg.image}
+                        alt="Visual Vibe input"
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '130px',
+                          borderRadius: '12px',
+                          objectFit: 'cover',
+                          border: '1px solid rgba(255, 255, 255, 0.2)'
+                        }}
+                      />
+                    </div>
+                  )}
                   <div style={{ whiteSpace: 'pre-line' }}>{msg.text}</div>
 
                   {/* Render mini recommendation cards directly inside chat */}
@@ -271,17 +314,103 @@ export default function MoodChatModal() {
           ))}
         </div>
 
+        {/* Selected Image Preview Pill */}
+        {selectedImage && (
+          <div style={{
+            margin: '0 20px 4px',
+            padding: '8px 12px',
+            borderRadius: '12px',
+            background: 'rgba(168, 85, 247, 0.12)',
+            border: '1px solid rgba(168, 85, 247, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+              <img
+                src={selectedImage}
+                alt="Upload preview"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  objectFit: 'cover',
+                  border: '1px solid rgba(255, 255, 255, 0.2)'
+                }}
+              />
+              <div style={{ fontSize: '12px', color: '#e2e8f0', lineHeight: 1.3 }}>
+                <span style={{ fontWeight: '700', color: '#c084fc' }}>Visual Vibe Attached</span>
+                <div style={{ fontSize: '10.5px', color: '#94a3b8' }}>Gemini-2 will match acoustic vibes to image aesthetics</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearImage}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
         {/* Input Bar */}
         <form onSubmit={handleSubmit} style={{
-          padding: '16px 20px 20px',
+          padding: '12px 20px 20px',
           display: 'flex',
-          gap: '10px'
+          gap: '10px',
+          alignItems: 'center'
         }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            style={{ display: 'none' }}
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Upload visual vibe photo or moodboard"
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '16px',
+              background: selectedImage ? 'rgba(168, 85, 247, 0.3)' : 'rgba(255, 255, 255, 0.06)',
+              border: selectedImage ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: selectedImage ? '#c084fc' : '#94a3b8',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = '#a855f7'}
+            onMouseLeave={(e) => {
+              if (!selectedImage) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+            }}
+          >
+            <ImageIcon size={19} />
+          </button>
+
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask for any vibe, setting, or sound..."
+            placeholder={selectedImage ? "Add an optional vibe hint or press send..." : "Ask for any vibe, setting, or sound..."}
             style={{
               flex: 1,
               background: 'rgba(255, 255, 255, 0.06)',
@@ -296,9 +425,10 @@ export default function MoodChatModal() {
             onFocus={(e) => e.target.style.borderColor = 'rgba(168, 85, 247, 0.5)'}
             onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.12)'}
           />
+
           <button
             type="submit"
-            disabled={!input.trim() || isChatLoading}
+            disabled={(!input.trim() && !selectedImage) || isChatLoading}
             style={{
               width: '46px',
               height: '46px',
@@ -309,12 +439,13 @@ export default function MoodChatModal() {
               alignItems: 'center',
               justifyContent: 'center',
               color: '#fff',
-              cursor: input.trim() && !isChatLoading ? 'pointer' : 'not-allowed',
-              opacity: input.trim() && !isChatLoading ? 1 : 0.4,
-              transition: 'opacity 0.2s ease'
+              cursor: (input.trim() || selectedImage) && !isChatLoading ? 'pointer' : 'not-allowed',
+              opacity: (input.trim() || selectedImage) && !isChatLoading ? 1 : 0.4,
+              transition: 'opacity 0.2s ease',
+              flexShrink: 0
             }}
           >
-            <Send size={18} />
+            {isChatLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </form>
       </div>

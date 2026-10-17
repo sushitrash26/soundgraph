@@ -321,10 +321,17 @@ export default function CardDeck3D() {
                     letterSpacing: '0.06em',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    justifyContent: 'space-between',
                     marginBottom: '6px'
                   }}>
-                    <Sparkles size={12} /> Knowledge Graph Reasoning
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Sparkles size={12} /> Knowledge Graph Reasoning
+                    </span>
+                    {card.transition_flow && (
+                      <span style={{ color: '#38bdf8', fontSize: '10.5px', textTransform: 'none', fontWeight: '500' }}>
+                        🌊 {card.transition_flow}
+                      </span>
+                    )}
                   </div>
                   <p style={{
                     fontSize: '12.5px',

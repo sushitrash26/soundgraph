@@ -14,6 +14,12 @@ class ChatRequest(BaseModel):
     user_id: str = "astitva_demo_user"
     prompt: str
 
+class ImageVibeRequest(BaseModel):
+    user_id: str = "astitva_demo_user"
+    image_base64: str
+    mime_type: str = "image/jpeg"
+    text_hint: Optional[str] = None
+
 @router.get("/recommendations")
 def get_recommendations(user_id: str = "astitva_demo_user", limit: int = 15):
     return GraphQueries.get_recommendations(user_id=user_id, limit=limit)
@@ -33,6 +39,15 @@ def get_user_library(user_id: str = "astitva_demo_user", limit: int = 50):
 @router.post("/chat")
 def mood_chat(payload: ChatRequest):
     return GraphQueries.mood_chat(user_id=payload.user_id, prompt=payload.prompt)
+
+@router.post("/vibe/image")
+def visual_vibe_search(payload: ImageVibeRequest):
+    return GraphQueries.visual_vibe_search(
+        user_id=payload.user_id,
+        image_base64=payload.image_base64,
+        mime_type=payload.mime_type,
+        text_hint=payload.text_hint
+    )
 
 @router.get("/recommendations/explain/{track_id:path}")
 def explain_recommendation(track_id: str, user_id: str = "astitva_demo_user"):

@@ -2,11 +2,12 @@ import sys
 from backend.core.neo4j_driver import neo4j_conn
 from backend.embeddings.gemini_embedder import GeminiEmbedder
 
-def run_backfill():
-    print("Fetching tracks needing Gemini embeddings...")
-    tracks = neo4j_conn.query("""
+def run_backfill(force: bool = False):
+    print("Fetching tracks for Gemini-2 embeddings...")
+    where_clause = "" if force else "WHERE t.embedding IS NULL"
+    tracks = neo4j_conn.query(f"""
     MATCH (t:Track)
-    WHERE t.embedding IS NULL
+    {where_clause}
     RETURN t.id AS id, t.name AS name,
            [(t)-[:BY]->(a:Artist) | a.name] AS artists,
            [(t)-[:IN_GENRE]->(g:Genre) | g.name] AS genres,
@@ -33,4 +34,5 @@ def run_backfill():
     print(f"Successfully saved {res[0]['updated']} track embeddings to Neo4j Vector Index!")
 
 if __name__ == "__main__":
-    run_backfill()
+    force_flag = "--force" in sys.argv
+    run_backfill(force=force_flag)
