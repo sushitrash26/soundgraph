@@ -41,6 +41,56 @@ export const useStore = create((set, get) => ({
   ],
   isChatLoading: false,
   dynamicSuggestions: [],
+  currentTrack: null,
+  isPlaying: false,
+  sessionDepth: 1,
+
+  setIsPlaying: (playing) => set({ isPlaying: playing }),
+
+  playTrack: (track) => {
+    if (!track) return;
+    set({ currentTrack: track, isPlaying: true });
+    get().setSelectedTrack(track);
+  },
+
+  playNextTrack: () => {
+    const { recommendations, currentTrack } = get();
+    if (!recommendations || recommendations.length === 0) return;
+    if (!currentTrack) {
+      get().playTrack(recommendations[0]);
+      return;
+    }
+    const curId = currentTrack.track_id || currentTrack.id;
+    const idx = recommendations.findIndex(t => (t.track_id || t.id) === curId);
+    const nextIdx = (idx + 1) >= recommendations.length ? 0 : idx + 1;
+    get().playTrack(recommendations[nextIdx]);
+  },
+
+  playPrevTrack: () => {
+    const { recommendations, currentTrack } = get();
+    if (!recommendations || recommendations.length === 0) return;
+    if (!currentTrack) {
+      get().playTrack(recommendations[0]);
+      return;
+    }
+    const curId = currentTrack.track_id || currentTrack.id;
+    const idx = recommendations.findIndex(t => (t.track_id || t.id) === curId);
+    const prevIdx = (idx - 1) < 0 ? recommendations.length - 1 : idx - 1;
+    get().playTrack(recommendations[prevIdx]);
+  },
+
+  appendFrontierCandidates: (cards) => {
+    if (!cards || !Array.isArray(cards) || cards.length === 0) return;
+    set((state) => {
+      const existingIds = new Set(state.recommendations.map(t => t.track_id || t.id));
+      const fresh = cards.filter(c => !existingIds.has(c.track_id || c.id));
+      if (fresh.length === 0) return state;
+      return {
+        recommendations: [...fresh, ...state.recommendations],
+        statusMessage: `✨ Autonomous frontier exploration added ${fresh.length} fresh tracks!`
+      };
+    });
+  },
 
   toggleChat: () => {
     const next = !get().isChatOpen;
@@ -91,6 +141,25 @@ export const useStore = create((set, get) => ({
       }));
     } catch (e) {
       console.error('Failed to send RLHF feedback:', e);
+    }
+  },
+
+  sendDwellTelemetry: async (trackId, arm = 0, dwellMs = 0, explicitAction = null) => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      await axios.post(`${API_BASE}/telemetry/dwell`, {
+        user_id: uid,
+        track_id: trackId,
+        arm: arm,
+        dwell_ms: dwellMs,
+        explicit_action: explicitAction,
+        session_depth: get().sessionDepth || 1,
+        hour: new Date().getHours()
+      });
+      set((state) => ({ sessionDepth: (state.sessionDepth || 1) + 1 }));
+    } catch (e) {
+      console.warn('Failed to stream dwell telemetry to LinUCB bandit:', e);
     }
   },
 

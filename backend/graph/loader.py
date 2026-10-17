@@ -5,21 +5,22 @@ from backend.core.logger import logger
 
 class GraphLoader:
     @staticmethod
-    def upsert_user(user: Dict[str, Any]) -> None:
+    def upsert_user(user: Dict[str, Any], tenant_id: str = "default_tenant") -> None:
         query = """
         MERGE (u:User {id: $id})
-        ON CREATE SET u.name = $name, u.source = $source, u.avatar_url = $avatar_url, u.created_at = datetime()
-        ON MATCH SET u.name = $name, u.source = $source, u.avatar_url = $avatar_url, u.updated_at = datetime()
+        ON CREATE SET u.name = $name, u.source = $source, u.avatar_url = $avatar_url, u.tenant_id = $tenant_id, u.created_at = datetime()
+        ON MATCH SET u.name = $name, u.source = $source, u.avatar_url = $avatar_url, u.tenant_id = $tenant_id, u.updated_at = datetime()
         """
         neo4j_conn.query(query, {
             "id": user.get("id"),
             "name": user.get("name", "Music Enthusiast"),
             "source": user.get("source", "spotify"),
-            "avatar_url": user.get("avatar_url", "")
+            "avatar_url": user.get("avatar_url", ""),
+            "tenant_id": user.get("tenant_id") or tenant_id
         })
 
     @staticmethod
-    def load_tracks_batch(user_id: str, tracks: List[Dict[str, Any]]) -> int:
+    def load_tracks_batch(user_id: str, tracks: List[Dict[str, Any]], tenant_id: str = "default_tenant") -> int:
         query = """
         UNWIND $batch AS item
         // 1. Merge Track
@@ -28,6 +29,7 @@ class GraphLoader:
             t.name = item.name,
             t.source = item.source,
             t.uri = item.uri,
+            t.preview_url = item.preview_url,
             t.duration_ms = item.duration_ms,
             t.popularity = item.popularity,
             t.energy = item.energy,
@@ -37,6 +39,7 @@ class GraphLoader:
             t.acousticness = item.acousticness,
             t.instrumentalness = item.instrumentalness,
             t.embedding = item.embedding,
+            t.audio_embedding = item.audio_embedding,
             t.cover_url = item.cover_url,
             t.created_at = datetime()
         ON MATCH SET
@@ -45,14 +48,16 @@ class GraphLoader:
             t.danceability = coalesce(item.danceability, t.danceability),
             t.popularity = coalesce(item.popularity, t.popularity),
             t.cover_url = coalesce(item.cover_url, t.cover_url),
+            t.preview_url = coalesce(item.preview_url, t.preview_url),
+            t.audio_embedding = coalesce(item.audio_embedding, t.audio_embedding),
             t.embedding = coalesce(item.embedding, t.embedding)
 
-        // 2. User LISTENED_TO Track
+        // 2. User LISTENED_TO Track (Tenant Isolated)
         WITH t, item
         MATCH (u:User {id: $user_id})
         MERGE (u)-[r:LISTENED_TO]->(t)
-        ON CREATE SET r.play_count = coalesce(item.play_count, 1), r.last_played = datetime(), r.source = item.source
-        ON MATCH SET r.play_count = r.play_count + coalesce(item.play_count, 1), r.last_played = datetime()
+        ON CREATE SET r.play_count = coalesce(item.play_count, 1), r.last_played = datetime(), r.source = item.source, r.tenant_id = $tenant_id
+        ON MATCH SET r.play_count = r.play_count + coalesce(item.play_count, 1), r.last_played = datetime(), r.tenant_id = $tenant_id
 
         // 3. Connect Artists
         WITH t, item
@@ -103,6 +108,9 @@ class GraphLoader:
                 "tempo": features.get("tempo") or tr.get("tempo"),
                 "acousticness": features.get("acousticness") or tr.get("acousticness"),
                 "instrumentalness": features.get("instrumentalness") or tr.get("instrumentalness"),
+                "cover_url": tr.get("cover_url") or "",
+                "preview_url": tr.get("preview_url") or "",
+                "audio_embedding": tr.get("audio_embedding"),
                 "embedding": None,
             })
 
@@ -116,9 +124,9 @@ class GraphLoader:
         except Exception as e:
             logger.warning(f"Embedding generation error during batch load: {e}")
 
-        result = neo4j_conn.query(query, {"user_id": user_id, "batch": cleaned_batch})
+        result = neo4j_conn.query(query, {"user_id": user_id, "tenant_id": tenant_id, "batch": cleaned_batch})
         processed = result[0]["processed"] if result else len(cleaned_batch)
-        logger.info(f"Loaded batch of {processed} tracks for user {user_id}")
+        logger.info(f"Loaded batch of {processed} tracks for user {user_id} (tenant: {tenant_id})")
         return processed
 
     @staticmethod

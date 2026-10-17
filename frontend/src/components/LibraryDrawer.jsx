@@ -15,7 +15,7 @@ const YouTubeIcon = ({ size = 14 }) => (
 );
 
 export default function LibraryDrawer() {
-  const { library } = useStore();
+  const { library, playTrack, currentTrack, isPlaying, setIsPlaying } = useStore();
   const [tab, setTab] = useState('all');
 
   const tracks = tab === 'spotify' 
@@ -212,25 +212,63 @@ export default function LibraryDrawer() {
                   </div>
                 </div>
 
-                <a
-                  href={getPlayUrl(item)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    color: '#94a3b8',
-                    padding: '6px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'color 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
-                  title="Open Track"
-                >
-                  <ExternalLink size={14} />
-                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    onClick={() => {
+                      const curId = currentTrack?.track_id || currentTrack?.id;
+                      const itemId = item.track_id || item.id;
+                      if (curId === itemId) {
+                        setIsPlaying(!isPlaying);
+                      } else {
+                        playTrack(item);
+                      }
+                    }}
+                    style={{
+                      background: (currentTrack?.track_id || currentTrack?.id) === (item.track_id || item.id) && isPlaying 
+                        ? 'rgba(168, 85, 247, 0.25)' 
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: (currentTrack?.track_id || currentTrack?.id) === (item.track_id || item.id) && isPlaying 
+                        ? '#c084fc' 
+                        : '#cbd5e1',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="Play track in SoundGraph"
+                  >
+                    {(currentTrack?.track_id || currentTrack?.id) === (item.track_id || item.id) && isPlaying ? (
+                      <span style={{ fontSize: '11px', fontWeight: 'bold' }}>❚❚</span>
+                    ) : (
+                      <Play size={12} fill="currentColor" style={{ marginLeft: '1px' }} />
+                    )}
+                  </button>
+
+                  <a
+                    href={getPlayUrl(item)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: '#94a3b8',
+                      padding: '6px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'color 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                    title="Open in external provider"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
               </div>
             );
           })

@@ -98,3 +98,47 @@ class FrontierFetcher:
             logger.error(f"Error loading frontier tracks into Neo4j: {e}")
 
         return raw_candidates
+
+    @classmethod
+    async def expand_frontier_async_broadcast(cls, prompt: str, user_id: str = "astitva_demo_user", limit: int = 4):
+        """
+        Decoupled Asynchronous Worker:
+        Discovers, embeds, and loads candidate tracks in background,
+        then broadcasts them over WebSockets to dynamically insert into the user's active deck.
+        Zero request blocking.
+        """
+        import asyncio
+        from backend.api.websocket import ws_manager
+
+        logger.info(f"FrontierFetcher: Starting background async expansion for '{prompt}'...")
+        loop = asyncio.get_event_loop()
+        candidates = await loop.run_in_executor(None, cls.expand_frontier_for_prompt, prompt, user_id, limit)
+
+        if candidates:
+            cards = []
+            for item in candidates:
+                cards.append({
+                    "track_id": item["id"],
+                    "track_name": item["name"],
+                    "artists": item.get("artists") or ["Frontier Artist"],
+                    "genres": item.get("genres") or ["experimental"],
+                    "source": item.get("source", "youtube"),
+                    "cover_url": item.get("cover_url", ""),
+                    "score": 0.88,
+                    "popularity": item.get("popularity", 70),
+                    "energy": item.get("features", {}).get("energy", 0.7),
+                    "valence": item.get("features", {}).get("valence", 0.6),
+                    "danceability": item.get("features", {}).get("danceability", 0.65),
+                    "bandit_arm": 3,
+                    "arm_name": "frontier_wildcard",
+                    "reason": f"✨ Autonomous Frontier Discovery: Extracted and embedded for '{prompt}'",
+                    "transition_flow": "Real-time AI Expansion"
+                })
+
+            await ws_manager.broadcast({
+                "type": "frontier_candidates_ready",
+                "prompt": prompt,
+                "candidates": cards,
+                "message": f"Discovered {len(cards)} fresh frontier tracks for '{prompt}'"
+            })
+            logger.info(f"FrontierFetcher: Broadcasted {len(cards)} frontier cards over WebSocket.")

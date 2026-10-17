@@ -8,13 +8,22 @@ from backend.ingestors.google_youtube_ingestor import GoogleYouTubeIngestor
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# In-memory session store (user identity & tokens)
-SESSION_STORE = {
-    "current_user": None,
-    "spotify_token": None,
-    "google_token": None,
-    "youtube_headers": None,
-}
+from backend.core.cache import UnifiedCache
+from backend.core.tokens import TokenManager
+
+# Backward-compatible proxy for in-memory access backed by UnifiedCache
+class PersistentSessionStore:
+    def __getitem__(self, key):
+        return UnifiedCache.get(f"session:{key}")
+
+    def __setitem__(self, key, value):
+        UnifiedCache.set(f"session:{key}", value, ttl=86400 * 30)
+
+    def get(self, key, default=None):
+        val = UnifiedCache.get(f"session:{key}")
+        return val if val is not None else default
+
+SESSION_STORE = PersistentSessionStore()
 
 @router.get("/spotify/login")
 def spotify_login(redirect: bool = True):
@@ -71,12 +80,22 @@ def spotify_callback(code: str = Query(...)):
         sp_oauth = SpotifyIngestor.get_oauth_manager()
         token_info = sp_oauth.get_access_token(code)
         access_token = token_info["access_token"]
+        refresh_token = token_info.get("refresh_token")
         SESSION_STORE["spotify_token"] = access_token
 
         # Fetch Spotify profile
         sp_ingestor = SpotifyIngestor(auth_token=access_token)
         profile = sp_ingestor.fetch_user_profile()
         GraphLoader.upsert_user(profile)
+
+        # Save tokens with automatic silent refresh
+        TokenManager.save_tokens(
+            user_id=profile["id"],
+            provider="spotify",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=token_info.get("expires_in", 3600)
+        )
 
         SESSION_STORE["current_user"] = {
             "id": profile["id"],
@@ -137,12 +156,22 @@ async def google_callback(code: str = Query(...)):
     try:
         tokens = await GoogleYouTubeIngestor.exchange_code_for_token(code)
         access_token = tokens["access_token"]
+        refresh_token = tokens.get("refresh_token")
         SESSION_STORE["google_token"] = access_token
 
         # Fetch Google profile
         ingestor = GoogleYouTubeIngestor(access_token=access_token)
         profile = await ingestor.fetch_user_profile()
         GraphLoader.upsert_user(profile)
+
+        # Save tokens with automatic silent refresh
+        TokenManager.save_tokens(
+            user_id=profile["id"],
+            provider="google",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=tokens.get("expires_in", 3600)
+        )
 
         SESSION_STORE["current_user"] = {
             "id": profile["id"],
@@ -178,7 +207,7 @@ def get_current_user():
 
 @router.post("/logout")
 def logout():
-    SESSION_STORE["current_user"] = None
-    SESSION_STORE["spotify_token"] = None
-    SESSION_STORE["google_token"] = None
+    UnifiedCache.delete("session:current_user")
+    UnifiedCache.delete("session:spotify_token")
+    UnifiedCache.delete("session:google_token")
     return {"status": "logged_out"}

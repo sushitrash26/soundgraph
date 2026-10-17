@@ -25,7 +25,15 @@ const COVERS = [
 ];
 
 export default function CardDeck3D() {
-  const { recommendations, sendFeedback } = useStore();
+  const { 
+    recommendations, 
+    sendFeedback, 
+    sendDwellTelemetry, 
+    playTrack, 
+    currentTrack, 
+    isPlaying, 
+    setIsPlaying 
+  } = useStore();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipeDirection, setSwipeDirection] = useState(null);
 
@@ -60,8 +68,10 @@ export default function CardDeck3D() {
 
   const handleAction = async (reward) => {
     if (!currentCard) return;
+    const dwellMs = Date.now() - cardStartTimeRef.current;
     setSwipeDirection(reward > 0 ? 'right' : 'left');
     await sendFeedback(currentCard.track_id || currentCard.id, reward);
+    sendDwellTelemetry(currentCard.track_id || currentCard.id, currentCard.bandit_arm || 0, dwellMs, reward);
     setTimeout(() => {
       setSwipeDirection(null);
       setCurrentIndex((prev) => (prev + 1 >= recommendations.length ? 0 : prev + 1));
@@ -69,14 +79,9 @@ export default function CardDeck3D() {
   };
 
   const handleNext = () => {
+    if (!currentCard) return;
     const dwellMs = Date.now() - cardStartTimeRef.current;
-    if (dwellMs < 2500 && currentCard) {
-      // Rapid skip (< 2.5s) implies disinterest -> soft implicit negative
-      sendFeedback(currentCard.track_id || currentCard.id, -0.2);
-    } else if (dwellMs > 10000 && currentCard) {
-      // Long dwell (> 10s) implies engaged curiosity -> soft implicit positive
-      sendFeedback(currentCard.track_id || currentCard.id, 0.3);
-    }
+    sendDwellTelemetry(currentCard.track_id || currentCard.id, currentCard.bandit_arm || 0, dwellMs, null);
     setCurrentIndex((prev) => (prev + 1 >= recommendations.length ? 0 : prev + 1));
   };
 
@@ -276,33 +281,78 @@ export default function CardDeck3D() {
                   <span>{Math.round((card.score || 0.85) * 100)}% Match</span>
                 </div>
 
-                {/* Direct Play Floating Button */}
-                <a
-                  href={getPlayUrl(card)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    position: 'absolute',
-                    bottom: '16px',
-                    right: '16px',
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: isSpotify ? '#1DB954' : '#FF0000',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
-                    color: '#fff',
-                    transition: 'transform 0.2s ease',
-                    textDecoration: 'none'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                  title={`Play on ${isSpotify ? 'Spotify' : 'YouTube'}`}
-                >
-                  <Play size={20} fill="#fff" style={{ marginLeft: '2px' }} />
-                </a>
+                {/* Embedded In-App Play Button & External Link */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: '16px',
+                  right: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  zIndex: 10
+                }}>
+                  <a
+                    href={getPlayUrl(card)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: 'rgba(0, 0, 0, 0.6)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#cbd5e1',
+                      transition: 'all 0.2s ease',
+                      textDecoration: 'none'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = '#cbd5e1'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    title={`Open in ${isSpotify ? 'Spotify' : 'YouTube'}`}
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+
+                  <button
+                    onClick={() => {
+                      const curId = currentTrack?.track_id || currentTrack?.id;
+                      const cardId = card.track_id || card.id;
+                      if (curId === cardId) {
+                        setIsPlaying(!isPlaying);
+                      } else {
+                        playTrack(card);
+                      }
+                    }}
+                    style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '50%',
+                      background: (currentTrack?.track_id || currentTrack?.id) === (card.track_id || card.id) && isPlaying 
+                        ? 'linear-gradient(135deg, #a855f7, #ec4899)' 
+                        : (isSpotify ? '#1DB954' : '#FF0000'),
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    title="Play track inside SoundGraph"
+                  >
+                    {(currentTrack?.track_id || currentTrack?.id) === (card.track_id || card.id) && isPlaying ? (
+                      <span style={{ fontSize: '15px', fontWeight: 'bold' }}>❚❚</span>
+                    ) : (
+                      <Play size={20} fill="#fff" style={{ marginLeft: '2px' }} />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Card Meta Content */}

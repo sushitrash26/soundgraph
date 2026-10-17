@@ -3,6 +3,7 @@ import { useStore } from './store/useStore';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
+import AudioPlayerBar from './components/AudioPlayerBar';
 import { Music, Network, LayoutDashboard, Sparkles, Radio, Disc3, LogOut, CheckCircle2, Music2 } from 'lucide-react';
 import axios from 'axios';
 
@@ -24,7 +25,10 @@ export default function App() {
     isLoading,
     isCheckingAuth,
     refreshDashboard,
-    toggleChat 
+    toggleChat,
+    addLiveEvent,
+    appendFrontierCandidates,
+    currentTrack 
   } = useStore();
 
   const [notification, setNotification] = useState('');
@@ -59,6 +63,35 @@ export default function App() {
     } else if (window.location.pathname.includes('/explorer')) {
       setActiveTab('explorer');
     }
+
+    // Connect to global WebSocket stream for live graph updates & frontier expansion
+    let ws;
+    try {
+      ws = new WebSocket('ws://localhost:8001/ws/live');
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'frontier_candidates_ready' && data.candidates) {
+            appendFrontierCandidates(data.candidates);
+            setNotification(data.message || '✨ New frontier tracks synthesized into your deck!');
+          }
+          addLiveEvent({
+            time: new Date().toLocaleTimeString(),
+            title: data.status || data.type || 'Event',
+            detail: data.message || data.stage || JSON.stringify(data),
+            type: data.type || 'info',
+          });
+        } catch (e) {
+          // ignore parsing error
+        }
+      };
+    } catch (e) {
+      console.warn('Global WS error:', e);
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
   }, []);
 
   return (
@@ -342,7 +375,7 @@ export default function App() {
         </header>
 
       {/* Main View Router */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: currentTrack ? '90px' : '0' }}>
         {isCheckingAuth ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
             <div style={{ textAlign: 'center' }}>
@@ -378,6 +411,7 @@ export default function App() {
       {/* Footer */}
       <footer style={{
         padding: '24px',
+        paddingBottom: currentTrack ? '110px' : '24px',
         borderTop: '1px solid var(--border-color)',
         textAlign: 'center',
         fontSize: '12px',
@@ -385,6 +419,9 @@ export default function App() {
       }}>
         SoundGraph · Cross-Platform Graph Data Science Recommendation Engine · Powered by Neo4j & FastAPI
       </footer>
+
+      {/* Embedded In-App Waveform Audio Player Bar */}
+      <AudioPlayerBar />
     </div>
   );
 }

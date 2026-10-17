@@ -6,6 +6,7 @@ from backend.embeddings.persona_clusterer import PersonaClusterer
 from backend.ingestors.frontier_fetcher import FrontierFetcher
 from backend.audio.flow_chainer import AIFlowChainer
 from backend.core.temporal import AITemporalEngine
+from backend.core.bandit import ContextualLinUCB
 
 class GraphQueries:
     @staticmethod
@@ -236,6 +237,12 @@ class GraphQueries:
                     logger.warning(f"Error querying persona centroid {persona['id']}: {e}")
 
             if persona_candidates:
+                # LinUCB Contextual Bandit Dynamic Arm Allocation
+                x_context = ContextualLinUCB.get_context_vector()
+                arm_ranks = ContextualLinUCB.rank_arms(user_id=user_id, x=x_context)
+                arm_weights = {r["arm"]: r["ucb_score"] for r in arm_ranks}
+                logger.info(f"LinUCB: Active Arm Policy for {user_id}: {arm_ranks}")
+
                 # Round-robin interleave across all personas to ensure diverse representation
                 interleaved: List[Dict[str, Any]] = []
                 seen_track_ids = set()
@@ -250,14 +257,16 @@ class GraphQueries:
                             tid = cand["track_id"]
                             if tid not in seen_track_ids:
                                 seen_track_ids.add(tid)
+                                cand["bandit_arm"] = 0  # Arm 0: Core Persona Centroid
+                                cand["arm_name"] = "persona_exploit"
                                 interleaved.append(cand)
                                 if len(interleaved) >= limit:
                                     break
                     if len(interleaved) >= limit:
                         break
 
-                # Multi-Armed Bandit Exploration (inject serendipitous wildcards if capacity permits)
-                if len(interleaved) < limit:
+                # LinUCB Exploration Wildcards (Arm 3: Frontier Wildcard)
+                if len(interleaved) < limit or arm_weights.get(3, 0.5) > 0.65:
                     exploration_query = """
                     MATCH (rec:Track)
                     WHERE NOT EXISTS { MATCH (u:User {id: $user_id})-[bad:FEEDBACK {reward: -1.0}]->(rec) }
@@ -276,16 +285,18 @@ class GraphQueries:
                         rec.energy AS energy,
                         rec.valence AS valence,
                         rec.danceability AS danceability,
-                        '✨ Serendipity Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
+                        '✨ LinUCB Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
                     ORDER BY popularity DESC
                     LIMIT $remLimit
                     """
                     try:
-                        rem_limit = limit - len(interleaved)
+                        rem_limit = max(2, limit - len(interleaved))
                         wildcards = neo4j_conn.query(exploration_query, {"user_id": user_id, "remLimit": rem_limit})
                         for w in wildcards:
                             if w["track_id"] not in seen_track_ids:
                                 seen_track_ids.add(w["track_id"])
+                                w["bandit_arm"] = 3  # Arm 3: Frontier Wildcard
+                                w["arm_name"] = "frontier_wildcard"
                                 interleaved.append(w)
                     except Exception as e:
                         logger.warning(f"Exploration query error: {e}")
@@ -446,24 +457,22 @@ class GraphQueries:
             except Exception as e:
                 logger.error(f"Error querying vector index in mood_chat: {e}")
 
-            # Step 3: Dynamic Frontier Expansion
+            # Step 3: Decoupled Dynamic Frontier Expansion
             # If top match similarity is low (< 0.77) OR fewer than 4 candidates returned,
-            # dynamically expand catalog from live web APIs (YouTube Music / Spotify)
+            # asynchronously expand catalog in background and broadcast new cards over WebSockets.
+            # Zero HTTP request latency.
             top_score = results[0]["score"] if results else 0.0
             if top_score < 0.77 or len(results) < 4:
                 try:
-                    logger.info(f"Top match score ({top_score}) below 0.77. Expanding frontier for: \"{prompt}\"")
-                    frontier_tracks = FrontierFetcher.expand_frontier_for_prompt(prompt, user_id=user_id, limit=4)
-                    if frontier_tracks:
-                        fresh_results = neo4j_conn.query(vibe_vector_query, {
-                            "user_id": user_id,
-                            "prompt": prompt,
-                            "queryVec": query_vec
-                        })
-                        if fresh_results:
-                            results = fresh_results
+                    logger.info(f"Top match score ({top_score}) below 0.77. Queueing async frontier broadcast for: \"{prompt}\"")
+                    import asyncio
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(FrontierFetcher.expand_frontier_async_broadcast(prompt, user_id=user_id, limit=4))
+                    except RuntimeError:
+                        asyncio.run(FrontierFetcher.expand_frontier_async_broadcast(prompt, user_id=user_id, limit=4))
                 except Exception as e:
-                    logger.warning(f"Dynamic Frontier Expansion error: {e}")
+                    logger.warning(f"Async Frontier Expansion queue error: {e}")
 
         # Graceful fallback if vector search yielded empty
         if not results:
@@ -782,3 +791,38 @@ class GraphQueries:
             ]
 
         return suggestions[:4]
+
+    @staticmethod
+    def record_dwell_telemetry(
+        user_id: str,
+        track_id: str,
+        arm: int,
+        dwell_ms: int,
+        explicit_action: Optional[float] = None,
+        session_depth: int = 1,
+        hour: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Processes real-time frontend dwell telemetry and performs closed-form LinUCB update.
+        """
+        x = ContextualLinUCB.get_context_vector(hour=hour, session_depth=session_depth)
+        continuous_reward = ContextualLinUCB.calculate_continuous_reward(dwell_ms=dwell_ms, explicit_action=explicit_action)
+        bandit_result = ContextualLinUCB.update(user_id=user_id, arm=arm, x=x, reward=continuous_reward)
+
+        # Write to Neo4j feedback edge if strong affinity or explicit action
+        if explicit_action is not None or continuous_reward >= 0.6 or continuous_reward <= -0.6:
+            fb_reward = explicit_action if explicit_action is not None else continuous_reward
+            try:
+                neo4j_conn.query("""
+                MATCH (u:User {id: $uid}), (t:Track {id: $tid})
+                MERGE (u)-[f:FEEDBACK]->(t)
+                SET f.reward = $reward, f.dwell_ms = $dwell, f.timestamp = datetime()
+                """, {"uid": user_id, "tid": track_id, "reward": fb_reward, "dwell": dwell_ms})
+            except Exception as e:
+                logger.warning(f"Error persisting telemetry feedback to Neo4j: {e}")
+
+        return {
+            "status": "success",
+            "reward": continuous_reward,
+            "bandit": bandit_result
+        }

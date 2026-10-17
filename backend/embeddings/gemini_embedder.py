@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional
 from backend.core.config import settings
 from backend.core.logger import logger
 
+import hashlib
+from backend.core.cache import UnifiedCache
+
 GEMINI_EMBED_MODEL = "models/gemini-embedding-2"
 GEMINI_EMBED_URL = f"https://generativelanguage.googleapis.com/v1beta/{GEMINI_EMBED_MODEL}:embedContent"
 TARGET_DIMENSIONS = 768
@@ -13,14 +16,18 @@ class GeminiEmbedder:
     """
     Multimodal Gemini Embedding Engine:
     Powered by Google's native 'gemini-embedding-2' multimodal model.
-    Maps text prompts, album cover art, and visual vibe boards into a single
-    shared 768-D geometric latent space (via Matryoshka dimensionality reduction).
+    Maps text prompts, album cover art, visual vibe boards, and raw audio waveforms into a single
+    shared 768-D geometric latent space backed by persistent distributed UnifiedCache.
     """
-    _cache: Dict[str, List[float]] = {}
 
     @classmethod
     def get_api_key(cls) -> str:
         return settings.GEMINI_API_KEY or ""
+
+    @classmethod
+    def _cache_key(cls, prefix: str, data: str) -> str:
+        h = hashlib.sha256(data.encode("utf-8", errors="ignore")).hexdigest()
+        return f"embed:{prefix}:{h}"
 
     @classmethod
     async def embed_text(cls, text: str) -> Optional[List[float]]:
@@ -29,8 +36,10 @@ class GeminiEmbedder:
         if not clean_text:
             return None
 
-        if clean_text in cls._cache:
-            return cls._cache[clean_text]
+        ckey = cls._cache_key("text", clean_text)
+        cached = UnifiedCache.get(ckey)
+        if cached and len(cached) == TARGET_DIMENSIONS:
+            return cached
 
         api_key = cls.get_api_key()
         if not api_key:
@@ -53,7 +62,7 @@ class GeminiEmbedder:
                     data = res.json()
                     vec = data.get("embedding", {}).get("values", [])
                     if len(vec) == TARGET_DIMENSIONS:
-                        cls._cache[clean_text] = vec
+                        UnifiedCache.set(ckey, vec, ttl=86400 * 30)  # 30 days cache
                         return vec
                 else:
                     logger.warning(f"Gemini-2 embed API status {res.status_code}: {res.text[:200]}")
@@ -127,10 +136,72 @@ class GeminiEmbedder:
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as pool:
                     return pool.submit(asyncio.run, cls.embed_image(image_bytes, mime_type)).result()
-            else:
-                return loop.run_until_complete(cls.embed_image(image_bytes, mime_type))
         except Exception:
             return asyncio.run(cls.embed_image(image_bytes, mime_type))
+
+    @classmethod
+    async def embed_audio(cls, audio_bytes: bytes, mime_type: str = "audio/mp3") -> Optional[List[float]]:
+        """
+        Natively embeds raw waveform audio (30s MP3 preview) into the exact same 768-D space
+        as track metadata and visual aesthetics using gemini-embedding-2.
+        """
+        api_key = cls.get_api_key()
+        if not api_key or not audio_bytes:
+            return None
+
+        # Check cache by audio hash
+        audio_hash = hashlib.sha256(audio_bytes).hexdigest()
+        ckey = f"embed:audio:{audio_hash}"
+        cached = UnifiedCache.get(ckey)
+        if cached and len(cached) == TARGET_DIMENSIONS:
+            return cached
+
+        b64_data = base64.b64encode(audio_bytes).decode("ascii")
+        url = f"{GEMINI_EMBED_URL}?key={api_key}"
+        payload = {
+            "model": GEMINI_EMBED_MODEL,
+            "content": {
+                "parts": [
+                    {
+                        "inlineData": {
+                            "mimeType": mime_type,
+                            "data": b64_data
+                        }
+                    }
+                ]
+            },
+            "outputDimensionality": TARGET_DIMENSIONS
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post(url, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    vec = data.get("embedding", {}).get("values", [])
+                    if len(vec) == TARGET_DIMENSIONS:
+                        UnifiedCache.set(ckey, vec, ttl=86400 * 30)
+                        return vec
+                else:
+                    logger.warning(f"Gemini-2 audio embed status {res.status_code}: {res.text[:200]}")
+        except Exception as e:
+            logger.error(f"Error calling Gemini-2 audio embed API: {e}")
+
+        return None
+
+    @classmethod
+    def embed_audio_sync(cls, audio_bytes: bytes, mime_type: str = "audio/mp3") -> Optional[List[float]]:
+        """Synchronous wrapper for embed_audio"""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    return pool.submit(asyncio.run, cls.embed_audio(audio_bytes, mime_type)).result()
+            else:
+                return loop.run_until_complete(cls.embed_audio(audio_bytes, mime_type))
+        except Exception:
+            return asyncio.run(cls.embed_audio(audio_bytes, mime_type))
 
     @classmethod
     async def embed_multimodal(cls, text: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = "image/jpeg") -> Optional[List[float]]:

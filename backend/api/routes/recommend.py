@@ -20,6 +20,15 @@ class ImageVibeRequest(BaseModel):
     mime_type: str = "image/jpeg"
     text_hint: Optional[str] = None
 
+class DwellTelemetryRequest(BaseModel):
+    user_id: str = "astitva_demo_user"
+    track_id: str
+    arm: Optional[int] = 0
+    dwell_ms: int
+    explicit_action: Optional[float] = None
+    session_depth: int = 1
+    hour: Optional[int] = None
+
 @router.get("/recommendations")
 def get_recommendations(user_id: str = "astitva_demo_user", limit: int = 15):
     return GraphQueries.get_recommendations(user_id=user_id, limit=limit)
@@ -30,6 +39,18 @@ def record_feedback(payload: FeedbackRequest):
         user_id=payload.user_id,
         track_id=payload.track_id,
         reward=payload.reward
+    )
+
+@router.post("/telemetry/dwell")
+def record_dwell_telemetry(payload: DwellTelemetryRequest):
+    return GraphQueries.record_dwell_telemetry(
+        user_id=payload.user_id,
+        track_id=payload.track_id,
+        arm=payload.arm or 0,
+        dwell_ms=payload.dwell_ms,
+        explicit_action=payload.explicit_action,
+        session_depth=payload.session_depth,
+        hour=payload.hour
     )
 
 @router.get("/library")
