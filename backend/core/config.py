@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     API_PORT: int = 8001
     API_HOST: str = "0.0.0.0"
 
+    GEMINI_API_KEY: str = ""
+
     class Config:
         env_file = str(ENV_FILE) if ENV_FILE.exists() else ".env"
         extra = "ignore"

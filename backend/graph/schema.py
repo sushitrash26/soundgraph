@@ -12,6 +12,8 @@ CONSTRAINTS_AND_INDEXES = [
     "CREATE INDEX track_name IF NOT EXISTS FOR (t:Track) ON (t.name)",
     "CREATE INDEX artist_name IF NOT EXISTS FOR (a:Artist) ON (a.name)",
     "CREATE INDEX user_name IF NOT EXISTS FOR (u:User) ON (u.name)",
+    # Vector Index (768-dim Gemini text-embedding-004 / gemini-embedding-001)
+    "CREATE VECTOR INDEX track_embeddings IF NOT EXISTS FOR (t:Track) ON (t.embedding) OPTIONS { indexConfig: { `vector.dimensions`: 768, `vector.similarity_function`: 'cosine' } }",
 ]
 
 def init_schema():

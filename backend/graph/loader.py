@@ -36,12 +36,14 @@ class GraphLoader:
             t.tempo = item.tempo,
             t.acousticness = item.acousticness,
             t.instrumentalness = item.instrumentalness,
+            t.embedding = item.embedding,
             t.created_at = datetime()
         ON MATCH SET
             t.energy = coalesce(item.energy, t.energy),
             t.valence = coalesce(item.valence, t.valence),
             t.danceability = coalesce(item.danceability, t.danceability),
-            t.popularity = coalesce(item.popularity, t.popularity)
+            t.popularity = coalesce(item.popularity, t.popularity),
+            t.embedding = coalesce(item.embedding, t.embedding)
 
         // 2. User LISTENED_TO Track
         WITH t, item
@@ -99,7 +101,18 @@ class GraphLoader:
                 "tempo": features.get("tempo") or tr.get("tempo"),
                 "acousticness": features.get("acousticness") or tr.get("acousticness"),
                 "instrumentalness": features.get("instrumentalness") or tr.get("instrumentalness"),
+                "embedding": None,
             })
+
+        # Automatically generate Gemini vector embeddings for every track
+        try:
+            from backend.embeddings.gemini_embedder import GeminiEmbedder
+            embeddings_map = GeminiEmbedder.embed_tracks_batch_sync(cleaned_batch)
+            for item in cleaned_batch:
+                item["embedding"] = embeddings_map.get(item["id"])
+            logger.info(f"Generated {len(embeddings_map)} Gemini embeddings for loaded tracks.")
+        except Exception as e:
+            logger.warning(f"Embedding generation error during batch load: {e}")
 
         result = neo4j_conn.query(query, {"user_id": user_id, "batch": cleaned_batch})
         processed = result[0]["processed"] if result else len(cleaned_batch)

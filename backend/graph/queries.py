@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from backend.core.neo4j_driver import neo4j_conn
 from backend.core.logger import logger
+from backend.embeddings.gemini_embedder import GeminiEmbedder
 
 class GraphQueries:
     @staticmethod
@@ -145,25 +146,90 @@ class GraphQueries:
     @staticmethod
     def get_recommendations(user_id: str, limit: int = 15) -> List[Dict[str, Any]]:
         """
-        Multi-tier RLHF-aware Recommendation Engine:
-        1. GDS SIMILAR_TO relationship traversal from listened tracks
-        2. STRICT DISTINCT deduplication (fixes multiple Blinding Lights bug)
-        3. Excludes disliked tracks (reward = -1.0) and already listened tracks
-        4. Boosts tracks related to positively rewarded tracks (+1.0)
+        Native Hybrid Graph + Vector (GraphRAG) Recommendation Engine:
+        1. Identifies user's seed embeddings from listened & positively-rated tracks
+        2. Queries Neo4j HNSW vector index (track_embeddings) using 768-dim Gemini embeddings
+        3. Traverses graph topology (artist collaborations, genre clusters, shared neighbors)
+        4. Excludes listened & disliked tracks (reward: -1.0)
+        5. Computes composite score: (0.55 * vector_sim) + (0.30 * graph_affinity) + (0.15 * rlhf_boost)
         """
-        query = """
+        # Phase 1: Retrieve user seed track embeddings
+        seed_query = """
+        MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(t:Track)
+        WHERE t.embedding IS NOT NULL
+        OPTIONAL MATCH (u)-[f:FEEDBACK {reward: 1.0}]->(t)
+        RETURN t.name AS name, t.embedding AS embedding, coalesce(f.reward, 0.0) AS reward, l.play_count AS plays
+        ORDER BY reward DESC, plays DESC
+        LIMIT 5
+        """
+        seed_rows = []
+        try:
+            seed_rows = neo4j_conn.query(seed_query, {"user_id": user_id})
+        except Exception as e:
+            logger.warning(f"Failed to fetch seed embeddings for user {user_id}: {e}")
+
+        if seed_rows and len(seed_rows) > 0:
+            # We have seed embeddings: take top seed vector
+            top_seed = seed_rows[0]
+            seed_vec = top_seed.get("embedding")
+            if seed_vec and len(seed_vec) == 768:
+                vector_hybrid_query = """
+                CALL db.index.vector.queryNodes('track_embeddings', 35, $seedVec)
+                YIELD node AS rec, score AS vector_score
+                MATCH (u:User {id: $user_id})
+                WHERE NOT (u)-[:LISTENED_TO]->(rec)
+                  AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+                OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+                OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+                OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
+                OPTIONAL MATCH (u)-[:LISTENED_TO]->(seed:Track)-[:BY|IN_GENRE*1..2]-(rec)
+                WITH rec, vector_score,
+                     collect(DISTINCT a.name) AS artists,
+                     collect(DISTINCT g.name) AS genres,
+                     head(collect(DISTINCT seed.name)) AS anchor_track,
+                     head(collect(DISTINCT seed.source)) AS anchor_source,
+                     count(DISTINCT seed) AS graph_affinity_count,
+                     coalesce(f.reward, 0.0) AS feedback_reward
+                WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
+                     round((vector_score * 0.55) + (case when graph_affinity_count > 0 then 0.30 else 0.15 end) + (feedback_reward * 0.15), 2) AS final_score
+                RETURN DISTINCT
+                    rec.id AS track_id,
+                    rec.name AS track_name,
+                    artists,
+                    genres,
+                    rec.source AS source,
+                    final_score AS score,
+                    coalesce(rec.popularity, 50) AS popularity,
+                    rec.energy AS energy,
+                    rec.valence AS valence,
+                    rec.danceability AS danceability,
+                    case
+                      when anchor_track is not null then 'Connected to your ' + coalesce(anchor_source, 'music') + ' taste in ' + anchor_track + ' via 768-D semantic vector space'
+                      else 'High-affinity vector match (' + toString(toInteger(round(vector_score * 100))) + '%) across ' + coalesce(head(genres), 'core') + ' latent embeddings'
+                    end AS reason
+                ORDER BY final_score DESC, popularity DESC
+                LIMIT $limit
+                """
+                try:
+                    records = neo4j_conn.query(vector_hybrid_query, {"user_id": user_id, "seedVec": seed_vec, "limit": limit})
+                    if records and len(records) > 0:
+                        return records
+                except Exception as e:
+                    logger.warning(f"Vector hybrid query error: {e}")
+
+        # Fallback 1: SIMILAR_TO graph traversal
+        sim_query = """
         MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(listened:Track)
-        // Check for SIMILAR_TO edges
         MATCH (listened)-[sim:SIMILAR_TO]->(rec:Track)
         WHERE NOT (u)-[:LISTENED_TO]->(rec)
           AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
         OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
         OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
         OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
-        WITH rec, 
-             collect(DISTINCT a.name) AS artists, 
+        WITH rec,
+             collect(DISTINCT a.name) AS artists,
              collect(DISTINCT g.name) AS genres,
-             max(sim.score) AS raw_sim, 
+             max(sim.score) AS raw_sim,
              head(collect(DISTINCT listened.name)) AS seed_track,
              head(collect(DISTINCT listened.source)) AS seed_source,
              coalesce(f.reward, 0.0) AS feedback_reward
@@ -181,163 +247,133 @@ class GraphQueries:
             rec.valence AS valence,
             rec.danceability AS danceability,
             'Discovered through your ' + coalesce(seed_source, 'music') + ' taste in ' + coalesce(seed_track, 'top artists') + ' sharing ' + coalesce(head(genres), 'core') + ' vibes' AS reason
-        ORDER BY score DESC, popularity DESC
+        ORDER BY final_score DESC, popularity DESC
         LIMIT $limit
         """
         try:
-            records = neo4j_conn.query(query, {"user_id": user_id, "limit": limit})
+            records = neo4j_conn.query(sim_query, {"user_id": user_id, "limit": limit})
             if records and len(records) > 0:
                 return records
         except Exception as e:
             logger.warning(f"SIMILAR_TO recommendation query returned error or empty: {e}")
 
-        # Fallback heuristic graph query (when GDS projection has not been run yet)
-        fallback_query = """
-        MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(my_track:Track)-[:IN_GENRE]->(g:Genre)<-[:IN_GENRE]-(rec:Track)
-        WHERE NOT (u)-[:LISTENED_TO]->(rec)
-          AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+        # Fallback 2: General catalog popularity & diversity (for cold-start or new users)
+        cold_start_query = """
+        MATCH (rec:Track)
+        WHERE NOT EXISTS { MATCH (u:User {id: $user_id})-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+          AND NOT EXISTS { MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(rec) }
         OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-        OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
-        WITH rec, my_track, count(DISTINCT g) AS common_genres, 
-             collect(DISTINCT g.name) AS genres, 
+        OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+        WITH rec,
              collect(DISTINCT a.name) AS artists,
-             coalesce(f.reward, 0.0) AS feedback_reward
-        WITH rec, artists, genres, head(collect(DISTINCT my_track.name)) AS seed_track,
-             head(collect(DISTINCT my_track.source)) AS seed_source,
-             round(0.72 + (common_genres * 0.06) + (feedback_reward * 0.15), 2) AS final_score
+             collect(DISTINCT g.name) AS genres
         RETURN DISTINCT
             rec.id AS track_id,
             rec.name AS track_name,
             artists,
             genres,
             rec.source AS source,
-            final_score AS score,
+            0.85 AS score,
             coalesce(rec.popularity, 50) AS popularity,
             rec.energy AS energy,
             rec.valence AS valence,
             rec.danceability AS danceability,
-            'Recommended because you loved ' + coalesce(seed_track, 'artists') + ' on ' + coalesce(seed_source, 'Spotify/YouTube') + ' in the ' + coalesce(head(genres), 'connected') + ' cluster' AS reason
-        ORDER BY final_score DESC, popularity DESC
+            'Top trending track in your cross-platform universe with ' + coalesce(head(genres), 'global') + ' energy' AS reason
+        ORDER BY popularity DESC
         LIMIT $limit
         """
         try:
-            return neo4j_conn.query(fallback_query, {"user_id": user_id, "limit": limit})
+            return neo4j_conn.query(cold_start_query, {"user_id": user_id, "limit": limit})
         except Exception as e:
-            logger.error(f"Fallback recommendation query error: {e}")
+            logger.error(f"Cold start query error: {e}")
             return []
 
     @staticmethod
     def mood_chat(user_id: str, prompt: str) -> Dict[str, Any]:
         """
-        Claude/Gemini-style Minimal Mood GraphRAG:
-        1. Analyzes mood/prompt keywords (acoustic, chill, energetic, party, dark, focus, etc.)
-        2. Queries user's Neo4j taste graph matching acoustic profile & genres
-        3. Saves conversation interaction to Neo4j (:UserMoodQuery) for persistent context
+        Native Hybrid GraphRAG Mood Assistant:
+        1. Encodes prompt into 768-dim semantic vector via Gemini embeddings (gemini-embedding-001)
+        2. Performs HNSW cosine similarity search over Neo4j vector index 'track_embeddings'
+        3. Reranks with user graph topology (artist/genre clusters) and RLHF feedback rewards
+        4. Saves query node (:MoodQuery) for persistent memory
+        5. Formats rich interactive card payload with Spotify/YouTube play links
         """
-        prompt_lower = prompt.lower()
-        target_energy = 0.5
-        target_valence = 0.5
-        target_energy = 0.60
-        target_valence = 0.55
-        genre_hint = None
-        vibe_summary = f"tracks matching \"{prompt}\""
-
-        if any(w in prompt_lower for w in ["rap", "hip hop", "hiphop", "bars", "trap", "drill"]):
-            target_energy = 0.88
-            target_valence = 0.70
-            genre_hint = "hip hop"
-            vibe_summary = "heavy-hitting rap flows and high-energy hip hop"
-        elif any(w in prompt_lower for w in ["drunk", "tipsy", "party", "club", "banger", "lit"]):
-            target_energy = 0.90
-            target_valence = 0.82
-            genre_hint = "dance"
-            vibe_summary = "high-energy late night party bangers and intoxicating basslines"
-        elif any(w in prompt_lower for w in ["chill", "relax", "sleep", "calm", "rain", "lofi", "lo-fi", "study", "peace"]):
-            target_energy = 0.35
-            target_valence = 0.45
-            genre_hint = "ambient"
-            vibe_summary = "mellow atmospheric frequencies and calm vibes"
-        elif any(w in prompt_lower for w in ["gym", "workout", "hype", "energy", "pump"]):
-            target_energy = 0.92
-            target_valence = 0.85
-            genre_hint = "electronic"
-            vibe_summary = "adrenaline-fueled workout anthems"
-        elif any(w in prompt_lower for w in ["sad", "heartbreak", "crying", "melancholy", "nostalg"]):
-            target_energy = 0.30
-            target_valence = 0.25
-            vibe_summary = "introspective, melancholic, and nostalgic sounds"
-        elif any(w in prompt_lower for w in ["focus", "code", "coding", "synth", "cyber"]):
-            target_energy = 0.70
-            target_valence = 0.50
-            genre_hint = "electronic"
-            vibe_summary = "focused synthwave and electronic flow state rhythms"
-
-        save_session_query = """
-        MATCH (u:User {id: $user_id})
-        CREATE (m:MoodQuery {
-            prompt: $prompt,
-            timestamp: datetime(),
-            target_energy: $target_energy,
-            target_valence: $target_valence
-        })
-        CREATE (u)-[:EXPRESSED_MOOD]->(m)
-        RETURN id(m) AS session_id
-        """
+        # Save session query node
         try:
-            neo4j_conn.query(save_session_query, {
-                "user_id": user_id,
-                "prompt": prompt,
-                "target_energy": target_energy,
-                "target_valence": target_valence
+            save_session_query = """
+            MATCH (u:User {id: $user_id})
+            CREATE (m:MoodQuery {
+                prompt: $prompt,
+                timestamp: datetime()
             })
+            CREATE (u)-[:EXPRESSED_MOOD]->(m)
+            """
+            neo4j_conn.query(save_session_query, {"user_id": user_id, "prompt": prompt})
         except Exception as e:
             logger.warning(f"Failed to record mood session: {e}")
 
-        # Search graph for tracks closest to this vibe
-        vibe_query = """
-        MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(seed:Track)
-        MATCH (seed)-[:SIMILAR_TO|IN_GENRE*1..2]-(rec:Track)
-        WHERE NOT (u)-[:LISTENED_TO]->(rec)
-          AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
-        OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-        OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
-        WITH rec, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
-             abs(coalesce(rec.energy, 0.5) - $target_energy) AS energy_diff,
-             abs(coalesce(rec.valence, 0.5) - $target_valence) AS valence_diff,
-             head(collect(DISTINCT seed.name)) AS anchor
-        WITH rec, artists, genres, anchor,
-             round(1.0 - (energy_diff * 0.4 + valence_diff * 0.4), 2) AS vibe_score
-        RETURN DISTINCT
-            rec.id AS track_id,
-            rec.name AS track_name,
-            artists,
-            genres,
-            rec.source AS source,
-            vibe_score AS score,
-            coalesce(rec.popularity, 50) AS popularity,
-            'Selected for your mood (\"' + $prompt + '\") bridging ' + coalesce(anchor, 'your library') + ' with ' + coalesce(head(genres), 'ambient') + ' frequencies' AS reason
-        ORDER BY score DESC, popularity DESC
-        LIMIT 6
-        """
+        # Step 1: Generate Gemini 768-dim vector embedding
+        query_vec = GeminiEmbedder.embed_text_sync(prompt)
         results = []
-        try:
-            results = neo4j_conn.query(vibe_query, {
-                "user_id": user_id,
-                "prompt": prompt,
-                "target_energy": target_energy,
-                "target_valence": target_valence
-            })
-        except Exception as e:
-            logger.error(f"Error querying mood graph: {e}")
 
+        if query_vec and len(query_vec) == 768:
+            # Step 2: Native Neo4j HNSW vector search + graph reranking
+            vibe_vector_query = """
+            CALL db.index.vector.queryNodes('track_embeddings', 25, $queryVec)
+            YIELD node AS rec, score AS vector_score
+            MATCH (u:User {id: $user_id})
+            WHERE NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
+            OPTIONAL MATCH (u)-[:LISTENED_TO]->(seed:Track)-[:BY|IN_GENRE*1..2]-(rec)
+            WITH rec, vector_score,
+                 collect(DISTINCT a.name) AS artists,
+                 collect(DISTINCT g.name) AS genres,
+                 head(collect(DISTINCT seed.name)) AS anchor_track,
+                 head(collect(DISTINCT seed.source)) AS anchor_source,
+                 count(DISTINCT seed) AS graph_affinity_count,
+                 coalesce(f.reward, 0.0) AS feedback_reward
+            WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
+                 round((vector_score * 0.60) + (case when graph_affinity_count > 0 then 0.25 else 0.10 end) + (feedback_reward * 0.15), 2) AS final_score
+            RETURN DISTINCT
+                rec.id AS track_id,
+                rec.name AS track_name,
+                artists,
+                genres,
+                rec.source AS source,
+                final_score AS score,
+                coalesce(rec.popularity, 50) AS popularity,
+                rec.energy AS energy,
+                rec.valence AS valence,
+                rec.danceability AS danceability,
+                case
+                  when anchor_track is not null then 'Matches mood vector (' + toString(toInteger(round(vector_score * 100))) + '%) & bridges with your ' + coalesce(anchor_source, 'music') + ' anchor ' + anchor_track
+                  else 'Semantic vector match (' + toString(toInteger(round(vector_score * 100))) + '%) for \"' + $prompt + '\"'
+                end AS reason
+            ORDER BY final_score DESC, popularity DESC
+            LIMIT 6
+            """
+            try:
+                results = neo4j_conn.query(vibe_vector_query, {
+                    "user_id": user_id,
+                    "prompt": prompt,
+                    "queryVec": query_vec
+                })
+            except Exception as e:
+                logger.error(f"Error querying vector index in mood_chat: {e}")
+
+        # Graceful fallback if vector search yielded empty
         if not results:
             results = GraphQueries.get_recommendations(user_id=user_id, limit=6)
 
-        preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:3]]
+        preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:4]]
+        preview_list = " • " + "\n • ".join(preview_titles) if preview_titles else ""
+
         explanation_msg = (
-            f"Here are top-tier recommendations for {vibe_summary} based on your connected graph:\n\n"
-            f"{' • ' + chr(10) + ' • '.join(preview_titles)}\n\n"
-            f"I have also updated your 3D Smart Deck with these candidates so you can preview, like, or swipe through them."
+            f"Here are top-tier recommendations for \"{prompt}\" retrieved via Gemini 768-D vector embeddings & Neo4j graph topology:\n\n"
+            f"{preview_list}\n\n"
+            f"I have also loaded these candidates directly into your 3D Smart Deck so you can swipe, like, or inspect their graph paths."
         )
 
         return {
