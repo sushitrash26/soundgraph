@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, UploadFile, File, Form
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from backend.graph.queries import GraphQueries
+from backend.services.acoustic_lens import AcousticLensService
 
 router = APIRouter(tags=["Recommendations & Analytics"])
 
@@ -68,6 +69,21 @@ def visual_vibe_search(payload: ImageVibeRequest):
         image_base64=payload.image_base64,
         mime_type=payload.mime_type,
         text_hint=payload.text_hint
+    )
+
+@router.post("/vibe/identify-audio")
+async def identify_audio_snippet(
+    file: UploadFile = File(...),
+    user_id: str = Form("astitva_demo_user"),
+    hint: Optional[str] = Form(None)
+):
+    audio_bytes = await file.read()
+    mime_type = file.content_type or "audio/webm"
+    return await AcousticLensService.identify_audio(
+        audio_bytes=audio_bytes,
+        mime_type=mime_type,
+        user_id=user_id,
+        text_hint=hint
     )
 
 @router.get("/vibe/suggestions")

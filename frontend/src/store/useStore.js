@@ -44,7 +44,10 @@ export const useStore = create((set, get) => ({
   currentTrack: null,
   isPlaying: false,
   sessionDepth: 1,
+  isAcousticLensOpen: false,
 
+  setIsAcousticLensOpen: (open) => set({ isAcousticLensOpen: open }),
+  toggleAcousticLens: () => set({ isAcousticLensOpen: !get().isAcousticLensOpen }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
 
   playTrack: (track) => {

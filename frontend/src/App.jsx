@@ -4,6 +4,7 @@ import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
 import AudioPlayerBar from './components/AudioPlayerBar';
+import AcousticLensModal from './components/AcousticLensModal';
 import { Music, Network, LayoutDashboard, Sparkles, Radio, Disc3, LogOut, CheckCircle2, Music2 } from 'lucide-react';
 import axios from 'axios';
 
@@ -28,7 +29,10 @@ export default function App() {
     toggleChat,
     addLiveEvent,
     appendFrontierCandidates,
-    currentTrack 
+    currentTrack,
+    isAcousticLensOpen,
+    setIsAcousticLensOpen,
+    toggleAcousticLens
   } = useStore();
 
   const [notification, setNotification] = useState('');
@@ -266,8 +270,34 @@ export default function App() {
             )}
           </div>
 
-          {/* Right Controls: Chat Trigger + Profile / Sign in */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* Right Controls: Chat Trigger + Acoustic Lens + Profile */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Acoustic Lens (Super-Shazam & YouTube Resolver) Trigger */}
+            <button
+              onClick={toggleAcousticLens}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '7px 16px',
+                borderRadius: '999px',
+                background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.22) 0%, rgba(168, 85, 247, 0.22) 100%)',
+                border: '1px solid rgba(236, 72, 153, 0.45)',
+                color: '#fff',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 16px rgba(236, 72, 153, 0.18)'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              title="Acoustic Lens: Hum, play chords, or identify any ambient song with YouTube stream"
+            >
+              <Radio size={14} color="#f472b6" className="pulse" />
+              <span>Acoustic Lens</span>
+            </button>
+
             {/* Minimal Claude/Gemini Style Assistant Trigger */}
             <button
               onClick={toggleChat}
@@ -422,6 +452,12 @@ export default function App() {
 
       {/* Embedded In-App Waveform Audio Player Bar */}
       <AudioPlayerBar />
+
+      {/* Acoustic Lens Super-Shazam Modal */}
+      <AcousticLensModal 
+        isOpen={isAcousticLensOpen} 
+        onClose={() => setIsAcousticLensOpen(false)} 
+      />
     </div>
   );
 }

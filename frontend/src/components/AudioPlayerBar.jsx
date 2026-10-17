@@ -122,43 +122,53 @@ export default function AudioPlayerBar() {
   }, [isPlaying]);
 
   const initOrPlayYouTube = (videoId) => {
-    if (window.YT && window.YT.Player) {
-      if (!ytPlayerRef.current) {
-        ytPlayerRef.current = new window.YT.Player('sg-hidden-yt-player', {
-          height: '1',
-          width: '1',
-          videoId: videoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-            disablekb: 1,
-            modestbranding: 1,
-            origin: window.location.origin
-          },
-          events: {
-            onReady: (e) => {
-              e.target.setVolume(volume * 100);
-              e.target.playVideo();
-              setIsPlaying(true);
+    try {
+      if (window.YT && window.YT.Player) {
+        if (!ytPlayerRef.current) {
+          const el = document.getElementById('sg-hidden-yt-player');
+          if (!el) return;
+          ytPlayerRef.current = new window.YT.Player('sg-hidden-yt-player', {
+            height: '1',
+            width: '1',
+            videoId: videoId,
+            playerVars: {
+              autoplay: 1,
+              controls: 0,
+              disablekb: 1,
+              modestbranding: 1,
+              origin: window.location.origin
             },
-            onStateChange: (e) => {
-              if (e.data === window.YT.PlayerState.PLAYING) {
-                setIsPlaying(true);
-                setDuration(ytPlayerRef.current.getDuration() || 180);
-              } else if (e.data === window.YT.PlayerState.PAUSED) {
-                setIsPlaying(false);
-              } else if (e.data === window.YT.PlayerState.ENDED) {
-                setIsPlaying(false);
-                if (isAutoQueue) playNextTrack();
+            events: {
+              onReady: (e) => {
+                try {
+                  e.target.setVolume(volume * 100);
+                  e.target.playVideo();
+                  setIsPlaying(true);
+                } catch (err) {}
+              },
+              onStateChange: (e) => {
+                if (e.data === window.YT.PlayerState.PLAYING) {
+                  setIsPlaying(true);
+                  if (ytPlayerRef.current && ytPlayerRef.current.getDuration) {
+                    setDuration(ytPlayerRef.current.getDuration() || 180);
+                  }
+                } else if (e.data === window.YT.PlayerState.PAUSED) {
+                  setIsPlaying(false);
+                } else if (e.data === window.YT.PlayerState.ENDED) {
+                  setIsPlaying(false);
+                  if (isAutoQueue) playNextTrack();
+                }
               }
             }
-          }
-        });
-      } else if (ytPlayerRef.current.loadVideoById) {
-        ytPlayerRef.current.loadVideoById(videoId);
-        ytPlayerRef.current.playVideo();
-        setIsPlaying(true);
+          });
+        } else if (ytPlayerRef.current.loadVideoById) {
+          ytPlayerRef.current.loadVideoById(videoId);
+          ytPlayerRef.current.playVideo();
+          setIsPlaying(true);
+        }
       }
+    } catch (e) {
+      console.warn('YouTube IFrame player initialization warning:', e);
     }
   };
 
