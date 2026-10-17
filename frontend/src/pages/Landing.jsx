@@ -26,30 +26,12 @@ export default function Landing() {
   const [clientSecret, setClientSecret] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    try {
-      const res = await axios.get('http://localhost:8001/auth/google/login');
-      if (res.data.login_url) {
-        window.location.href = res.data.login_url;
-      } else {
-        setGoogleModal(true);
-      }
-    } catch (e) {
-      setGoogleModal(true);
-    }
+  const handleGoogleLogin = () => {
+    window.location.href = 'http://localhost:8001/auth/google/login';
   };
 
-  const handleSpotifyLogin = async () => {
-    try {
-      const res = await axios.get('http://localhost:8001/auth/spotify/login');
-      if (res.data.login_url) {
-        window.location.href = res.data.login_url;
-      } else {
-        setSpotifyModal(true);
-      }
-    } catch (e) {
-      setSpotifyModal(true);
-    }
+  const handleSpotifyLogin = () => {
+    window.location.href = 'http://localhost:8001/auth/spotify/login';
   };
 
   const handleSaveGoogleCreds = async () => {
