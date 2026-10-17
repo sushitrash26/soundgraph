@@ -119,7 +119,8 @@ export default function App() {
         </div>
       )}
 
-        {/* Top Navigation Bar */}
+        {/* Top Navigation Bar for Dashboard / Explorer */}
+        {user && activeTab !== 'landing' && (
         <header style={{
           background: 'rgba(10, 11, 16, 0.85)',
           backdropFilter: 'blur(24px)',
@@ -403,6 +404,7 @@ export default function App() {
             )}
           </div>
         </header>
+        )}
 
       {/* Main View Router */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: currentTrack ? '90px' : '0' }}>
@@ -439,6 +441,7 @@ export default function App() {
       </main>
 
       {/* Footer */}
+      {user && activeTab !== 'landing' && (
       <footer style={{
         padding: '24px',
         paddingBottom: currentTrack ? '110px' : '24px',
@@ -449,6 +452,7 @@ export default function App() {
       }}>
         SoundGraph · Cross-Platform Graph Data Science Recommendation Engine · Powered by Neo4j & FastAPI
       </footer>
+      )}
 
       {/* Embedded In-App Waveform Audio Player Bar */}
       <AudioPlayerBar />

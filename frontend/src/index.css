@@ -1,58 +1,191 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-primary: #08090d;
-  --bg-secondary: #0f1118;
-  --bg-card: rgba(18, 21, 31, 0.75);
-  --bg-card-hover: rgba(26, 31, 46, 0.85);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(168, 85, 247, 0.35);
+  /* Approved Dark Mode Flat Palette per B4 */
+  --bg-primary: #000000;
+  --bg-surface: #181818;
+  --bg-card: #1F1F1F;
+  --bg-elevated: #272727;
+  --bg-subtle: #313131;
+  --bg-dark-accent: #131209;
+
+  /* Strict Card & Element Borders */
+  --border-color: #272727;
+  --border-hover: #313131;
+  --border-focus: #a855f7;
 
   --accent-purple: #a855f7;
-  --accent-purple-glow: rgba(168, 85, 247, 0.3);
   --accent-cyan: #06b6d4;
-  --accent-cyan-glow: rgba(6, 182, 212, 0.3);
   --accent-green: #10b981;
-  --accent-amber: #f59e0b;
   --spotify-green: #1db954;
   --youtube-red: #ff0033;
 
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --text-main: #FFFFFF;
+  --text-muted: #9B9B9B;
+  --text-dim: #666666;
 
-  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Outfit', 'Inter', sans-serif;
+  /* Typography: Approved single family Manrope + Geist Mono per B1 */
+  --font-main: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+
+  /* Motion Choreography: Custom cubic bezier per B7 */
+  --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-fluid: 700ms;
 }
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  font-style: normal; /* Never use italic fonts per B1 */
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-primary); /* Flat background per B4, never gradients */
   color: var(--text-main);
   font-family: var(--font-main);
+  font-size: 16px;
+  line-height: 24px;
   overflow-x: hidden;
   min-height: 100vh;
-  background-image: 
-    radial-gradient(circle at 15% 15%, rgba(168, 85, 247, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(29, 185, 84, 0.04) 0%, transparent 60%);
-  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Glassmorphism Styles */
+/* Copy rules per B1 */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+p, span, li, button, input {
+  text-wrap: pretty;
+}
+
+/* Fluid Island Navigation per B7 */
+.fluid-nav-pill {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.fluid-nav-container {
+  margin-top: 24px;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 8px 16px;
+  background: rgba(24, 24, 24, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6);
+  transition: all var(--duration-fluid) var(--ease-fluid);
+}
+
+/* Cards & Surface Panels per B3 & B4 */
+.surface-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color); /* All the way around per B4 */
+  border-radius: 16px; /* rounded-2xl */
+  transition: all var(--duration-fluid) var(--ease-fluid);
+}
+
+.surface-card:hover {
+  border-color: var(--border-hover);
+  background-color: var(--bg-elevated);
+}
+
+/* Buttons per B1, B2 & B9 */
+.btn-main {
+  font-family: var(--font-main);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  padding: 8px 12px; /* 8px vertical, 12px horizontal per B2 */
+  border-radius: 8px; /* rounded-lg */
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  background-color: #FFFFFF;
+  color: #000000;
+  transition: all var(--duration-fluid) var(--ease-fluid);
+}
+
+.btn-main:hover {
+  background-color: #E5E5E5;
+  transform: translateY(-1px);
+}
+
+.btn-main:active {
+  transform: scale(0.98); /* Physical feedback per B9 */
+}
+
+.btn-main:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.btn-secondary-flat {
+  font-family: var(--font-main);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  transition: all var(--duration-fluid) var(--ease-fluid);
+}
+
+.btn-secondary-flat:hover {
+  background-color: var(--bg-card);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary-flat:active {
+  transform: scale(0.98);
+}
+
+.btn-secondary-flat:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Hero Section Gradient Text per B5 */
+.hero-heading-gradient {
+  background: linear-gradient(90deg, #FFFFFF 0%, #9B9B9B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* Glass panel fallback */
 .glass-panel {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--duration-fluid) var(--ease-fluid);
 }
 
 .glass-panel:hover {
