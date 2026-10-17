@@ -132,8 +132,8 @@ export default function MoodChatModal() {
                 }}
               >
                 <div style={{
-                  maxWidth: '82%',
-                  padding: '12px 18px',
+                  maxWidth: '85%',
+                  padding: '14px 18px',
                   borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                   background: isUser 
                     ? 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)' 
@@ -144,7 +144,81 @@ export default function MoodChatModal() {
                   lineHeight: '1.55',
                   boxShadow: isUser ? '0 4px 16px rgba(168, 85, 247, 0.25)' : 'none'
                 }}>
-                  {msg.text}
+                  <div style={{ whiteSpace: 'pre-line' }}>{msg.text}</div>
+
+                  {/* Render mini recommendation cards directly inside chat */}
+                  {msg.cards && msg.cards.length > 0 && (
+                    <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {msg.cards.map((c, cIdx) => {
+                        const isSpot = c.source !== 'youtube';
+                        const playUrl = isSpot 
+                          ? `https://open.spotify.com/search/${encodeURIComponent(c.track_name + ' ' + (c.artists?.[0] || ''))}`
+                          : `https://music.youtube.com/search?q=${encodeURIComponent(c.track_name + ' ' + (c.artists?.[0] || ''))}`;
+                        return (
+                          <div
+                            key={c.track_id || cIdx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 12px',
+                              borderRadius: '12px',
+                              background: 'rgba(0, 0, 0, 0.4)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)'
+                            }}
+                          >
+                            <div style={{ overflow: 'hidden', paddingRight: '8px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {c.track_name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {c.artists?.join(', ')} · <span style={{ color: isSpot ? '#4ade80' : '#f87171' }}>{isSpot ? 'Spotify' : 'YouTube'}</span>
+                              </div>
+                            </div>
+
+                            <a
+                              href={playUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                borderRadius: '999px',
+                                background: isSpot ? 'rgba(29, 185, 84, 0.2)' : 'rgba(255, 0, 0, 0.2)',
+                                border: isSpot ? '1px solid rgba(29, 185, 84, 0.4)' : '1px solid rgba(255, 0, 0, 0.4)',
+                                color: isSpot ? '#4ade80' : '#f87171',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                textDecoration: 'none',
+                                flexShrink: 0
+                              }}
+                            >
+                              Play ↗
+                            </a>
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        onClick={toggleChat}
+                        style={{
+                          marginTop: '6px',
+                          padding: '8px 12px',
+                          borderRadius: '10px',
+                          background: 'rgba(168, 85, 247, 0.15)',
+                          border: '1px solid rgba(168, 85, 247, 0.35)',
+                          color: '#c084fc',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✨ View & Swipe in 3D Smart Deck
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

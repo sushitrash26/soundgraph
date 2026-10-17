@@ -1,4 +1,5 @@
 import httpx
+import re
 from typing import List, Dict, Any, Optional
 from backend.core.config import settings
 from backend.core.logger import logger
@@ -70,15 +71,21 @@ class GoogleYouTubeIngestor(BaseIngestor):
             }
 
     async def fetch_listening_data(self) -> List[Dict[str, Any]]:
-        """Fetches liked music videos, YouTube playlists, and history"""
+        """
+        STRICT Music Ingestion:
+        Filters specifically for categoryId == 10 (Music) or topicCategories containing Music.
+        Discards random YouTube videos, shorts, lectures, and non-music content.
+        """
         if not self.access_token:
             raise ValueError("Access token required")
 
         tracks: Dict[str, Dict[str, Any]] = {}
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
+        candidate_video_ids = []
+
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # 1. Get user channel and liked playlist ID
+            # 1. Fetch Liked Videos Playlist Items
             try:
                 ch_res = await client.get(
                     f"{YOUTUBE_API_BASE}/channels",
@@ -91,7 +98,6 @@ class GoogleYouTubeIngestor(BaseIngestor):
                         related = items[0].get("contentDetails", {}).get("relatedPlaylists", {})
                         likes_playlist_id = related.get("likes")
                         if likes_playlist_id:
-                            # 2. Fetch Liked Videos / Songs
                             likes_res = await client.get(
                                 f"{YOUTUBE_API_BASE}/playlistItems",
                                 params={"part": "snippet", "playlistId": likes_playlist_id, "maxResults": 50},
@@ -99,13 +105,13 @@ class GoogleYouTubeIngestor(BaseIngestor):
                             )
                             if likes_res.status_code == 200:
                                 for item in likes_res.json().get("items", []):
-                                    track = self._parse_youtube_item(item)
-                                    if track:
-                                        tracks[track["id"]] = track
+                                    vid = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+                                    if vid:
+                                        candidate_video_ids.append(vid)
             except Exception as e:
                 logger.warning(f"Error fetching YouTube liked playlist: {e}")
 
-            # 3. Fetch User's YouTube Music Playlists
+            # 2. Fetch User's YouTube Music Playlists
             try:
                 pl_res = await client.get(
                     f"{YOUTUBE_API_BASE}/playlists",
@@ -117,56 +123,117 @@ class GoogleYouTubeIngestor(BaseIngestor):
                         pl_id = pl["id"]
                         items_res = await client.get(
                             f"{YOUTUBE_API_BASE}/playlistItems",
-                            params={"part": "snippet", "playlistId": pl_id, "maxResults": 25},
+                            params={"part": "snippet", "playlistId": pl_id, "maxResults": 30},
                             headers=headers
                         )
                         if items_res.status_code == 200:
                             for item in items_res.json().get("items", []):
-                                track = self._parse_youtube_item(item)
-                                if track:
-                                    if track["id"] in tracks:
-                                        tracks[track["id"]]["play_count"] += 1
-                                    else:
-                                        tracks[track["id"]] = track
+                                vid = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+                                if vid:
+                                    candidate_video_ids.append(vid)
             except Exception as e:
                 logger.warning(f"Error fetching YouTube user playlists: {e}")
 
-        logger.info(f"Google/YouTube Ingestion fetched {len(tracks)} real music tracks.")
+            # 3. BATCH VALIDATE: Strictly verify categoryId == 10 (Music) or topicCategories has Music
+            unique_ids = list(dict.fromkeys(candidate_video_ids))
+            for i in range(0, len(unique_ids), 50):
+                chunk = unique_ids[i:i+50]
+                try:
+                    v_res = await client.get(
+                        f"{YOUTUBE_API_BASE}/videos",
+                        params={"part": "snippet,topicDetails", "id": ",".join(chunk)},
+                        headers=headers
+                    )
+                    if v_res.status_code == 200:
+                        for v in v_res.json().get("items", []):
+                            if self._is_strictly_music(v):
+                                track = self._parse_music_video(v)
+                                if track:
+                                    tracks[track["id"]] = track
+                except Exception as e:
+                    logger.warning(f"Error validating video categories: {e}")
+
+        logger.info(f"Strict Music Filter: Kept {len(tracks)} verified music tracks out of {len(candidate_video_ids)} raw videos.")
         return list(tracks.values())
 
-    def _parse_youtube_item(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        snippet = item.get("snippet", {})
-        vid = snippet.get("resourceId", {}).get("videoId")
+    def _is_strictly_music(self, video_item: Dict[str, Any]) -> bool:
+        """Determines if a YouTube video is strictly a music track"""
+        snippet = video_item.get("snippet", {})
+        topic_details = video_item.get("topicDetails", {})
+
+        title = snippet.get("title", "")
+        # Filter out obvious non-music shorts and private items
+        if any(bad in title.lower() for bad in ["#shorts", "private video", "deleted video", "short video"]):
+            return False
+
+        # Category 10 is the YouTube API category ID for Music
+        category_id = snippet.get("categoryId")
+        if category_id == "10":
+            return True
+
+        # Check topic categories for Music topics
+        topic_categories = topic_details.get("topicCategories", [])
+        if any("Music" in tc or "music" in tc for tc in topic_categories):
+            return True
+
+        channel_title = snippet.get("channelTitle", "")
+        if channel_title.endswith(" - Topic") or "vevo" in channel_title.lower() or "records" in channel_title.lower():
+            return True
+
+        return False
+
+    def _parse_music_video(self, video_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        vid = video_item.get("id")
         if not vid:
             return None
 
+        snippet = video_item.get("snippet", {})
         raw_title = snippet.get("title", "Unknown Track")
-        channel = snippet.get("videoOwnerChannelTitle") or snippet.get("channelTitle", "Various Artists")
+        channel = snippet.get("channelTitle", "Various Artists")
 
-        # Parse Artist - Song pattern
+        # Clean noise like (Official Music Video), [Official Audio], etc.
+        cleaned_title = re.sub(
+            r"(\[.*?\]|\(.*?\)|official music video|official video|official audio|lyric video|lyrics|audio|4k|hd)",
+            "",
+            raw_title,
+            flags=re.IGNORECASE
+        ).strip()
+
+        # Parse Artist - Title
         artist = channel.replace(" - Topic", "").strip()
-        song_name = raw_title
-        if " - " in raw_title:
-            parts = raw_title.split(" - ", 1)
+        song_name = cleaned_title or raw_title
+        if " - " in cleaned_title:
+            parts = cleaned_title.split(" - ", 1)
             artist = parts[0].strip()
-            song_name = parts[1].split("(")[0].split("[")[0].strip()
+            song_name = parts[1].strip()
+
+        # Determine genre keywords
+        genres = ["electronic", "pop", "hip hop", "rock", "indie"]
+        topic_cats = video_item.get("topicDetails", {}).get("topicCategories", [])
+        extracted_genres = []
+        for tc in topic_cats:
+            slug = tc.split("/")[-1].replace("_music", "").replace("_", " ").lower()
+            if slug and slug != "music":
+                extracted_genres.append(slug)
+        if not extracted_genres:
+            extracted_genres = ["pop", "hip hop", "electronic"]
 
         return {
             "id": f"youtube:video:{vid}",
             "name": song_name,
             "artists": [artist],
-            "album": "YouTube Music Library",
-            "genres": ["electronic", "ambient", "indie", "pop"],
+            "album": "YouTube Music",
+            "genres": extracted_genres,
             "source": "youtube",
             "uri": f"https://music.youtube.com/watch?v={vid}",
-            "popularity": 75,
-            "play_count": 2,
+            "popularity": 80,
+            "play_count": 3,
             "features": {
-                "energy": 0.70,
-                "valence": 0.62,
-                "danceability": 0.65,
-                "tempo": 118.0,
-                "acousticness": 0.18,
+                "energy": 0.72,
+                "valence": 0.60,
+                "danceability": 0.68,
+                "tempo": 120.0,
+                "acousticness": 0.20,
                 "instrumentalness": 0.05
             }
         }

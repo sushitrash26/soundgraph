@@ -9,6 +9,8 @@ SPOTIFY_SCOPES = [
     "user-top-read",
     "user-read-recently-played",
     "user-library-read",
+    "playlist-read-private",
+    "playlist-read-collaborative",
     "user-read-email",
     "user-read-private",
 ]
@@ -87,7 +89,24 @@ class SpotifyIngestor(BaseIngestor):
         except Exception as e:
             logger.warning(f"Error fetching saved tracks: {e}")
 
-        # 4. Audio Features in chunks of 50
+        # 4. User Playlists and Playlist Items
+        try:
+            playlists = self.sp.current_user_playlists(limit=20)
+            for pl in (playlists.get("items", []) or []):
+                pl_id = pl.get("id")
+                if pl_id:
+                    pl_items = self.sp.playlist_items(pl_id, limit=35)
+                    for p_item in (pl_items.get("items", []) or []):
+                        tr = p_item.get("track")
+                        if tr and tr.get("id"):
+                            tid = f"spotify:track:{tr['id']}"
+                            if tid not in tracks_dict:
+                                tracks_dict[tid] = self._normalize_track(tr)
+                            tracks_dict[tid]["play_count"] += 1
+        except Exception as e:
+            logger.warning(f"Error fetching user playlists: {e}")
+
+        # 5. Audio Features in chunks of 50
         raw_ids = [tid.replace("spotify:track:", "") for tid in tracks_dict.keys()]
         for i in range(0, len(raw_ids), 50):
             chunk = raw_ids[i:i+50]

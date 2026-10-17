@@ -90,7 +90,8 @@ export const useStore = create((set, get) => ({
       
       const assistantMsg = {
         role: 'assistant',
-        text: res.data.message || 'Updated your recommendations deck matching this vibe.'
+        text: res.data.message || 'Updated your recommendations deck matching this vibe.',
+        cards: res.data.cards || []
       };
 
       set((state) => ({

@@ -237,23 +237,40 @@ class GraphQueries:
         prompt_lower = prompt.lower()
         target_energy = 0.5
         target_valence = 0.5
+        target_energy = 0.60
+        target_valence = 0.55
         genre_hint = None
+        vibe_summary = f"tracks matching \"{prompt}\""
 
-        if any(w in prompt_lower for w in ["chill", "relax", "sleep", "calm", "rain", "lofi", "lo-fi", "study", "peace"]):
+        if any(w in prompt_lower for w in ["rap", "hip hop", "hiphop", "bars", "trap", "drill"]):
+            target_energy = 0.88
+            target_valence = 0.70
+            genre_hint = "hip hop"
+            vibe_summary = "heavy-hitting rap flows and high-energy hip hop"
+        elif any(w in prompt_lower for w in ["drunk", "tipsy", "party", "club", "banger", "lit"]):
+            target_energy = 0.90
+            target_valence = 0.82
+            genre_hint = "dance"
+            vibe_summary = "high-energy late night party bangers and intoxicating basslines"
+        elif any(w in prompt_lower for w in ["chill", "relax", "sleep", "calm", "rain", "lofi", "lo-fi", "study", "peace"]):
             target_energy = 0.35
             target_valence = 0.45
-            genre_hint = "chill"
-        elif any(w in prompt_lower for w in ["gym", "workout", "hype", "energy", "party", "dance", "club", "upbeat"]):
-            target_energy = 0.85
-            target_valence = 0.75
-            genre_hint = "dance"
-        elif any(w in prompt_lower for w in ["sad", "heartbreak", "crying", "melancholy", "nostalg"]):
-            target_energy = 0.3
-            target_valence = 0.25
-        elif any(w in prompt_lower for w in ["focus", "code", "coding", "synth", "cyber"]):
-            target_energy = 0.7
-            target_valence = 0.5
+            genre_hint = "ambient"
+            vibe_summary = "mellow atmospheric frequencies and calm vibes"
+        elif any(w in prompt_lower for w in ["gym", "workout", "hype", "energy", "pump"]):
+            target_energy = 0.92
+            target_valence = 0.85
             genre_hint = "electronic"
+            vibe_summary = "adrenaline-fueled workout anthems"
+        elif any(w in prompt_lower for w in ["sad", "heartbreak", "crying", "melancholy", "nostalg"]):
+            target_energy = 0.30
+            target_valence = 0.25
+            vibe_summary = "introspective, melancholic, and nostalgic sounds"
+        elif any(w in prompt_lower for w in ["focus", "code", "coding", "synth", "cyber"]):
+            target_energy = 0.70
+            target_valence = 0.50
+            genre_hint = "electronic"
+            vibe_summary = "focused synthwave and electronic flow state rhythms"
 
         save_session_query = """
         MATCH (u:User {id: $user_id})
@@ -316,7 +333,12 @@ class GraphQueries:
         if not results:
             results = GraphQueries.get_recommendations(user_id=user_id, limit=6)
 
-        explanation_msg = f"I analyzed your listening graph for \"{prompt}\". Found {len(results)} tracks bridging your connected Spotify and YouTube taste profiles."
+        preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:3]]
+        explanation_msg = (
+            f"Here are top-tier recommendations for {vibe_summary} based on your connected graph:\n\n"
+            f"{' • ' + chr(10) + ' • '.join(preview_titles)}\n\n"
+            f"I have also updated your 3D Smart Deck with these candidates so you can preview, like, or swipe through them."
+        )
 
         return {
             "message": explanation_msg,
