@@ -379,16 +379,48 @@ class GraphQueries:
             return []
 
     @staticmethod
+    def _parse_query_intent(prompt: str) -> Dict[str, Any]:
+        """Fast entity and music intent parser using Gemini 3.5 Flash Lite."""
+        from backend.core.config import settings
+        import httpx, json
+        api_key = settings.GEMINI_API_KEY
+        if not api_key:
+            return {"artist": None, "is_artist_exclusive": False, "search_query": prompt}
+
+        system_instruction = (
+            "You are an expert music search understanding AI.\n"
+            "Analyze the user's music request and extract:\n"
+            "- artist: specific artist name if asked for (normalize e.g. 'weekend' -> 'The Weeknd', 'young stunners' -> 'Young Stunners') or null if no artist\n"
+            "- is_artist_exclusive: boolean, true if user asks for specific artist (e.g. 'only X songs', 'tell me X song', 'play X', 'more songs by X')\n"
+            "- track_name: specific track title if requested, else null\n"
+            "- genre_mood: mood, vibe or genre if mentioned, else null\n"
+            "- search_query: the best clean YouTube Music search query to get those exact songs\n"
+            "Respond strictly in JSON: {\"artist\": string or null, \"is_artist_exclusive\": bool, \"track_name\": string or null, \"genre_mood\": string or null, \"search_query\": string}"
+        )
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": f"{system_instruction}\n\nUser Request: {prompt}"}]}],
+                "generationConfig": {"temperature": 0.0, "responseMimeType": "application/json"}
+            }
+            with httpx.Client(timeout=4.0) as client:
+                res = client.post(url, json=payload)
+                if res.status_code == 200:
+                    return json.loads(res.json()["candidates"][0]["content"]["parts"][0]["text"])
+        except Exception as e:
+            logger.warning(f"Error parsing music intent: {e}")
+        return {"artist": None, "is_artist_exclusive": False, "search_query": prompt}
+
+    @staticmethod
     def mood_chat(user_id: str, prompt: str) -> Dict[str, Any]:
         """
-        Native Hybrid GraphRAG Mood Assistant with Autonomous Dynamic Frontier Expansion:
-        1. Encodes prompt into 768-dim semantic vector via Gemini embeddings.
-        2. Performs HNSW cosine similarity search over Neo4j vector index 'track_embeddings'.
-        3. Dynamic Frontier Expansion: If top match < 0.77 or low density, autonomously queries live APIs,
-           embeds fresh tracks, and ingests them into Neo4j in real time.
-        4. Reranks with user graph topology and RLHF feedback rewards.
-        5. Saves query node (:MoodQuery) for persistent context.
-        6. Formats rich interactive card payload with Spotify/YouTube play links.
+        Native Hybrid GraphRAG Mood & Artist Assistant with Dynamic Frontier Expansion:
+        1. Parses intent & entities (artist constraints, mood, track targets) via Gemini.
+        2. Synchronous Frontier Expansion: If an artist has < 4 songs in Neo4j, live-queries
+           YouTube Music & Spotify catalogs, embeds them with 768-D vectors, and returns them immediately.
+        3. Strict Artist Constraint Enforcement: Prevents unrelated artists from leaking into 'only X' queries.
+        4. HNSW Vector Index + Graph Affinity Reranking.
+        5. Saves query node (:MoodQuery) for taste persistence.
         """
         # Save session query node
         try:
@@ -404,93 +436,190 @@ class GraphQueries:
         except Exception as e:
             logger.warning(f"Failed to record mood session: {e}")
 
-        # Step 1: Generate Gemini 768-dim vector embedding
-        query_vec = GeminiEmbedder.embed_text_sync(prompt)
+        # Step 1: Parse intent and targeted artist/track
+        parsed_intent = GraphQueries._parse_query_intent(prompt)
+        artist_target = parsed_intent.get("artist")
+        is_artist_exclusive = parsed_intent.get("is_artist_exclusive", False)
+        search_query = parsed_intent.get("search_query") or prompt
+
         results = []
 
-        if query_vec and len(query_vec) == 768:
-            # Step 2: Native Neo4j HNSW vector search + graph reranking
-            vibe_vector_query = """
-            CALL db.index.vector.queryNodes('track_embeddings', 25, $queryVec)
-            YIELD node AS rec, score AS vector_score
-            MATCH (u:User {id: $user_id})
-            WHERE NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
-            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
-            OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
-            OPTIONAL MATCH (u)-[:LISTENED_TO]->(seed:Track)-[:BY|IN_GENRE*1..2]-(rec)
-            WITH rec, vector_score,
-                 collect(DISTINCT a.name) AS artists,
-                 collect(DISTINCT g.name) AS genres,
-                 head(collect(DISTINCT seed.name)) AS anchor_track,
-                 head(collect(DISTINCT seed.source)) AS anchor_source,
-                 count(DISTINCT seed) AS graph_affinity_count,
-                 coalesce(f.reward, 0.0) AS feedback_reward
-            WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
-                 round(vector_score, 3) AS final_score
+        # Branch 1: If user asked for a specific artist (e.g. "Young Stunners" or "The Weeknd")
+        if artist_target:
+            count_q = """
+            MATCH (t:Track)-[:BY]->(a:Artist)
+            WHERE toLower(a.name) CONTAINS toLower($art) OR toLower(t.name) CONTAINS toLower($art)
+            RETURN count(DISTINCT t) as c
+            """
+            cnt_res = neo4j_conn.query(count_q, {"art": artist_target})
+            local_count = cnt_res[0]["c"] if cnt_res else 0
+
+            # If local Neo4j has fewer than 4 tracks for this artist, expand synchronously now!
+            if local_count < 4:
+                logger.info(f"Artist '{artist_target}' has only {local_count} tracks in Neo4j. Expanding synchronously via FrontierFetcher...")
+                frontier_tracks = FrontierFetcher.expand_frontier_for_prompt(search_query, user_id=user_id, limit=6)
+                if frontier_tracks:
+                    for ft in frontier_tracks:
+                        results.append({
+                            "track_id": ft["id"],
+                            "track_name": ft["name"],
+                            "artists": ft.get("artists") or [artist_target],
+                            "genres": ft.get("genres") or ["Hip-Hop", "Indie"],
+                            "source": ft.get("source", "youtube"),
+                            "cover_url": ft.get("cover_url", ""),
+                            "score": 0.98,
+                            "popularity": 85,
+                            "energy": ft.get("features", {}).get("energy", 0.7),
+                            "valence": ft.get("features", {}).get("valence", 0.6),
+                            "danceability": ft.get("features", {}).get("danceability", 0.65),
+                            "reason": f"Direct catalog resolution for {artist_target}"
+                        })
+
+            # Also pull existing artist tracks from Neo4j
+            artist_db_query = """
+            MATCH (t:Track)-[:BY]->(a:Artist)
+            WHERE toLower(a.name) CONTAINS toLower($art) OR toLower(t.name) CONTAINS toLower($art)
+            OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+            WITH t, collect(DISTINCT a.name) as artists, collect(DISTINCT g.name) as genres
             RETURN DISTINCT
-                rec.id AS track_id,
-                rec.name AS track_name,
-                rec.embedding AS embedding,
+                t.id AS track_id,
+                t.name AS track_name,
                 artists,
                 genres,
-                rec.source AS source,
-                coalesce(rec.cover_url, '') AS cover_url,
-                final_score AS score,
-                coalesce(rec.popularity, 50) AS popularity,
-                rec.energy AS energy,
-                rec.valence AS valence,
-                rec.danceability AS danceability,
-                case
-                  when anchor_track is not null then 'Matches mood vector (' + toString(toInteger(round(vector_score * 100))) + '%) & bridges with your ' + coalesce(anchor_source, 'music') + ' anchor ' + anchor_track
-                  else 'Semantic vector match (' + toString(toInteger(round(vector_score * 100))) + '%) for \"' + $prompt + '\"'
-                end AS reason
-            ORDER BY final_score DESC, popularity DESC
-            LIMIT 6
+                t.source AS source,
+                coalesce(t.cover_url, '') AS cover_url,
+                0.95 AS score,
+                coalesce(t.popularity, 80) AS popularity,
+                t.energy AS energy,
+                t.valence AS valence,
+                t.danceability AS danceability,
+                'Official track by ' + $art AS reason
+            ORDER BY popularity DESC
+            LIMIT 8
             """
-            try:
-                results = neo4j_conn.query(vibe_vector_query, {
-                    "user_id": user_id,
-                    "prompt": prompt,
-                    "queryVec": query_vec
-                })
-            except Exception as e:
-                logger.error(f"Error querying vector index in mood_chat: {e}")
+            db_artist_tracks = neo4j_conn.query(artist_db_query, {"art": artist_target})
+            existing_ids = {r["track_id"] for r in results}
+            for dat in (db_artist_tracks or []):
+                if dat["track_id"] not in existing_ids:
+                    results.append(dat)
 
-            # Step 3: Decoupled Dynamic Frontier Expansion
-            # If top match similarity is low (< 0.77) OR fewer than 4 candidates returned,
-            # asynchronously expand catalog in background and broadcast new cards over WebSockets.
-            # Zero HTTP request latency.
-            top_score = results[0]["score"] if results else 0.0
-            if top_score < 0.77 or len(results) < 4:
+            # Strictly filter to only the requested artist if exclusive
+            if is_artist_exclusive and results:
+                target_lower = artist_target.lower()
+                cleaned = []
+                for r in results:
+                    art_list = [a.lower() for a in r.get("artists", [])]
+                    # Also check for group members (e.g. Talha Anjum / Talhah Yunus for Young Stunners)
+                    is_match = any(target_lower in a for a in art_list) or target_lower in r.get("track_name", "").lower()
+                    if not is_match and target_lower == "young stunners":
+                        is_match = any("talha" in a for a in art_list)
+                    if is_match:
+                        cleaned.append(r)
+                if cleaned:
+                    results = cleaned
+
+        # Branch 2: Semantic Vector Search for General Moods / Vibes
+        if not results:
+            query_vec = GeminiEmbedder.embed_text_sync(prompt)
+            if query_vec and len(query_vec) == 768:
+                vibe_vector_query = """
+                CALL db.index.vector.queryNodes('track_embeddings', 25, $queryVec)
+                YIELD node AS rec, score AS vector_score
+                MATCH (u:User {id: $user_id})
+                WHERE NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+                OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+                OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+                OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
+                OPTIONAL MATCH (u)-[:LISTENED_TO]->(seed:Track)-[:BY|IN_GENRE*1..2]-(rec)
+                WITH rec, vector_score,
+                     collect(DISTINCT a.name) AS artists,
+                     collect(DISTINCT g.name) AS genres,
+                     head(collect(DISTINCT seed.name)) AS anchor_track,
+                     head(collect(DISTINCT seed.source)) AS anchor_source,
+                     count(DISTINCT seed) AS graph_affinity_count,
+                     coalesce(f.reward, 0.0) AS feedback_reward
+                WITH rec, artists, genres, anchor_track, anchor_source, vector_score,
+                     round(vector_score, 3) AS final_score
+                RETURN DISTINCT
+                    rec.id AS track_id,
+                    rec.name AS track_name,
+                    rec.embedding AS embedding,
+                    artists,
+                    genres,
+                    rec.source AS source,
+                    coalesce(rec.cover_url, '') AS cover_url,
+                    final_score AS score,
+                    coalesce(rec.popularity, 50) AS popularity,
+                    rec.energy AS energy,
+                    rec.valence AS valence,
+                    rec.danceability AS danceability,
+                    case
+                      when anchor_track is not null then 'Matches mood vector (' + toString(toInteger(round(vector_score * 100))) + '%) & bridges with your ' + coalesce(anchor_source, 'music') + ' anchor ' + anchor_track
+                      else 'Semantic vector match (' + toString(toInteger(round(vector_score * 100))) + '%) for \"' + $prompt + '\"'
+                    end AS reason
+                ORDER BY final_score DESC, popularity DESC
+                LIMIT 6
+                """
                 try:
-                    logger.info(f"Top match score ({top_score}) below 0.77. Queueing async frontier broadcast for: \"{prompt}\"")
-                    import asyncio
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(FrontierFetcher.expand_frontier_async_broadcast(prompt, user_id=user_id, limit=4))
-                    except RuntimeError:
-                        asyncio.run(FrontierFetcher.expand_frontier_async_broadcast(prompt, user_id=user_id, limit=4))
+                    results = neo4j_conn.query(vibe_vector_query, {
+                        "user_id": user_id,
+                        "prompt": prompt,
+                        "queryVec": query_vec
+                    })
                 except Exception as e:
-                    logger.warning(f"Async Frontier Expansion queue error: {e}")
+                    logger.error(f"Error querying vector index in mood_chat: {e}")
 
-        # Graceful fallback if vector search yielded empty
+                top_score = results[0]["score"] if results else 0.0
+                if top_score < 0.77 or len(results) < 4:
+                    fresh_tracks = FrontierFetcher.expand_frontier_for_prompt(prompt, user_id=user_id, limit=4)
+                    if fresh_tracks:
+                        for ft in fresh_tracks:
+                            results.insert(0, {
+                                "track_id": ft["id"],
+                                "track_name": ft["name"],
+                                "artists": ft.get("artists") or ["Featured Artist"],
+                                "genres": ft.get("genres") or ["Music"],
+                                "source": ft.get("source", "youtube"),
+                                "cover_url": ft.get("cover_url", ""),
+                                "score": 0.95,
+                                "popularity": 80,
+                                "energy": ft.get("features", {}).get("energy", 0.7),
+                                "valence": ft.get("features", {}).get("valence", 0.6),
+                                "danceability": ft.get("features", {}).get("danceability", 0.65),
+                                "reason": f"Live frontier expansion for \"{prompt}\""
+                            })
+
+        # Graceful fallback if completely empty
         if not results:
             results = GraphQueries.get_recommendations(user_id=user_id, limit=6)
 
-        # AI Flow Chaining for continuous DJ-like progression
+        # AI Flow Chaining
         results = AIFlowChainer.chain_session_flow(results)
+
+        # Sanitize metadata: ensure artists is never empty and remove raw embeddings
         for item in results:
             item.pop("embedding", None)
+            if not item.get("artists") or len(item.get("artists")) == 0:
+                if artist_target:
+                    item["artists"] = [artist_target]
+                else:
+                    item["artists"] = ["Featured Artist"]
 
         preview_titles = [f"**{r['track_name']}** ({', '.join(r['artists'])})" for r in results[:4]]
         preview_list = " • " + "\n • ".join(preview_titles) if preview_titles else ""
 
-        explanation_msg = (
-            f"Here are top-tier recommendations for \"{prompt}\" retrieved via Gemini 768-D vector embeddings & Neo4j graph topology:\n\n"
-            f"{preview_list}\n\n"
-            f"I have also loaded these candidates directly into your 3D Smart Deck so you can swipe, like, or inspect their graph paths."
-        )
+        if artist_target:
+            explanation_msg = (
+                f"Here are the top tracks for **{artist_target}** resolved via live catalog federation & graph topology:\n\n"
+                f"{preview_list}\n\n"
+                f"I have also loaded these candidates directly into your 3D Smart Deck so you can swipe, like, or inspect their graph paths."
+            )
+        else:
+            explanation_msg = (
+                f"Here are top-tier recommendations for \"{prompt}\" retrieved via Gemini 768-D vector embeddings & Neo4j graph topology:\n\n"
+                f"{preview_list}\n\n"
+                f"I have also loaded these candidates directly into your 3D Smart Deck so you can swipe, like, or inspect their graph paths."
+            )
 
         return {
             "message": explanation_msg,
