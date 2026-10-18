@@ -298,6 +298,11 @@ export const useStore = create((set, get) => ({
   sendChatPrompt: async (prompt) => {
     if (!prompt.trim()) return;
     const userMsg = { role: 'user', text: prompt };
+    const currentHistory = (get().chatMessages || []).slice(-6).map(m => ({
+      role: m.role,
+      text: m.text
+    }));
+
     set((state) => ({
       chatMessages: [...state.chatMessages, userMsg],
       isChatLoading: true
@@ -308,7 +313,8 @@ export const useStore = create((set, get) => ({
       const uid = user?.id || 'astitva_demo_user';
       const res = await axios.post(`${API_BASE}/chat`, {
         user_id: uid,
-        prompt: prompt
+        prompt: prompt,
+        history: currentHistory
       });
       
       const assistantMsg = {
@@ -320,6 +326,12 @@ export const useStore = create((set, get) => ({
       set((state) => ({
         chatMessages: [...state.chatMessages, assistantMsg],
         recommendations: res.data.cards && res.data.cards.length > 0 ? res.data.cards : state.recommendations,
+        activeDeckId: res.data.deck_id || state.activeDeckId,
+        activeDeckTitle: res.data.deck_title || state.activeDeckTitle,
+        searchBanner: res.data.deck_title ? {
+          title: res.data.deck_title,
+          explanation: res.data.message
+        } : state.searchBanner,
         isChatLoading: false
       }));
     } catch (e) {
@@ -553,9 +565,14 @@ export const useStore = create((set, get) => ({
     try {
       const user = get().user;
       const uid = user?.id || 'astitva_demo_user';
+      const currentHistory = (get().chatMessages || []).slice(-6).map(m => ({
+        role: m.role,
+        text: m.text
+      }));
       const res = await axios.post(`${API_BASE}/chat`, {
         user_id: uid,
-        prompt: prompt
+        prompt: prompt,
+        history: currentHistory
       });
       const data = res.data || {};
       if (data.type === 'library_answer') {

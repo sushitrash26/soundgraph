@@ -14,6 +14,7 @@ class FeedbackRequest(BaseModel):
 class ChatRequest(BaseModel):
     user_id: str = "astitva_demo_user"
     prompt: str
+    history: Optional[List[Dict[str, Any]]] = None
 
 class ImageVibeRequest(BaseModel):
     user_id: str = "astitva_demo_user"
@@ -90,7 +91,11 @@ from backend.services.ai_agent_service import AIAgentService
 
 @router.post("/chat")
 async def mood_chat(payload: ChatRequest):
-    return await AIAgentService.process_chat(user_id=payload.user_id, prompt=payload.prompt)
+    return await AIAgentService.process_chat(
+        user_id=payload.user_id,
+        prompt=payload.prompt,
+        history=payload.history or []
+    )
 
 @router.post("/vibe/image")
 def visual_vibe_search(payload: ImageVibeRequest):
