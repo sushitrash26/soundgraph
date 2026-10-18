@@ -114,7 +114,7 @@ class GraphQueries:
         return {"status": "error", "message": "Failed to record feedback"}
 
     @staticmethod
-    def get_user_taste_profile(user_id: str = "astitva_demo_user") -> Dict[str, Any]:
+    def get_user_taste_profile(user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Comprehensive, 100% dynamic user taste profile:
         1. Top artists with play counts, track counts, and graph PageRank centrality
@@ -124,6 +124,11 @@ class GraphQueries:
         5. Top genres distribution
         6. Taste Personas computed via Spherical K-Means clustering
         """
+        if not user_id:
+            from backend.api.routes.auth import SESSION_STORE
+            sess_user = SESSION_STORE.get("current_user")
+            user_id = sess_user.get("id", "") if sess_user else ""
+
         # 1. Top Artists
         top_artists_query = """
         MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)-[:BY]->(a:Artist)
@@ -1157,12 +1162,17 @@ class GraphQueries:
         return {"path_nodes": [], "path_length": 0}
 
     @staticmethod
-    def get_dynamic_suggestions(user_id: str = "astitva_demo_user") -> List[str]:
+    def get_dynamic_suggestions(user_id: Optional[str] = None) -> List[str]:
         """
         AI-Driven Situational & Persona Suggestion Generator:
         Zero hardcoded text pills.
         Synthesizes active taste personas with real-time circadian diurnal context.
         """
+        if not user_id:
+            from backend.api.routes.auth import SESSION_STORE
+            sess_user = SESSION_STORE.get("current_user")
+            user_id = sess_user.get("id", "") if sess_user else ""
+
         from datetime import datetime
         suggestions = []
         history_query = """

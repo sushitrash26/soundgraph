@@ -151,7 +151,7 @@ export const useStore = create((set, get) => ({
   fetchDynamicSuggestions: async () => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/vibe/suggestions?user_id=${encodeURIComponent(uid)}`);
       if (res.data && Array.isArray(res.data) && res.data.length > 0) {
         set({ dynamicSuggestions: res.data });
@@ -164,7 +164,7 @@ export const useStore = create((set, get) => ({
   fetchTasteProfile: async () => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/user/taste-profile?user_id=${encodeURIComponent(uid)}`);
       if (res.data) {
         set({ tasteProfile: res.data });
@@ -177,7 +177,7 @@ export const useStore = create((set, get) => ({
   fetchLibrary: async (params = {}) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const q = new URLSearchParams({ user_id: uid, limit: params.limit || 60 });
       if (params.mood && params.mood !== 'all') q.append('mood', params.mood);
       if (params.sort) q.append('sort', params.sort);
@@ -203,7 +203,7 @@ export const useStore = create((set, get) => ({
     
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const existingIds = new Set(recommendations.map(t => t.track_id || t.id));
       const allExcluded = Array.from(new Set([...Array.from(swipedIds || []), ...Array.from(existingIds)]));
 
@@ -234,7 +234,7 @@ export const useStore = create((set, get) => ({
   sendFeedback: async (trackId, reward) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       await axios.post(`${API_BASE}/recommendations/feedback`, {
         user_id: uid,
         track_id: trackId,
@@ -290,7 +290,7 @@ export const useStore = create((set, get) => ({
   sendDwellTelemetry: async (trackId, arm = 0, dwellMs = 0, explicitAction = null) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       await axios.post(`${API_BASE}/telemetry/dwell`, {
         user_id: uid,
         track_id: trackId,
@@ -321,7 +321,7 @@ export const useStore = create((set, get) => ({
 
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.post(`${API_BASE}/chat`, {
         user_id: uid,
         prompt: prompt,
@@ -368,7 +368,7 @@ export const useStore = create((set, get) => ({
 
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.post(`${API_BASE}/vibe/image`, {
         user_id: uid,
         image_base64: imageBase64,
@@ -452,7 +452,7 @@ export const useStore = create((set, get) => ({
   fetchUserDecks: async () => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/decks?user_id=${encodeURIComponent(uid)}`);
       set({ userDecks: res.data || [] });
     } catch (e) {
@@ -463,7 +463,7 @@ export const useStore = create((set, get) => ({
   createDeck: async (name, mood = 'general', trackIds = []) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.post(`${API_BASE}/decks`, {
         user_id: uid,
         name,
@@ -481,7 +481,7 @@ export const useStore = create((set, get) => ({
   deleteDeck: async (deckId) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       await axios.delete(`${API_BASE}/decks/${deckId}?user_id=${encodeURIComponent(uid)}`);
       if (get().activeDeckId === deckId) {
         get().selectDeck('for_you', 'For You');
@@ -525,7 +525,7 @@ export const useStore = create((set, get) => ({
     try {
       set({ isLoading: true, statusMessage: `Loading deck "${deckTitle}"...` });
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/decks/${deckId}?user_id=${encodeURIComponent(uid)}`);
       if (res.data && res.data.cards) {
         set({
@@ -547,7 +547,7 @@ export const useStore = create((set, get) => ({
     set({ isOmniSearching: true, statusMessage: `Searching & bridging taste for "${query}"...` });
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/search/bridge?q=${encodeURIComponent(query)}&user_id=${encodeURIComponent(uid)}&limit=10`);
       if (res.data && res.data.cards && res.data.cards.length > 0) {
         set({
@@ -575,7 +575,7 @@ export const useStore = create((set, get) => ({
     set({ isOmniSearching: true, statusMessage: 'Consulting AI Music Brain...' });
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const currentHistory = (get().chatMessages || []).slice(-6).map(m => ({
         role: m.role,
         text: m.text
@@ -663,7 +663,7 @@ export const useStore = create((set, get) => ({
   fetchRecommendations: async (reset = true, customMood = null) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const activeMood = customMood !== null ? customMood : get().deckMoodFilter;
 
       const q = new URLSearchParams({
@@ -718,7 +718,7 @@ export const useStore = create((set, get) => ({
   fetchExplanation: async (trackId) => {
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const uid = user?.id || '';
       const res = await axios.get(`${API_BASE}/recommendations/explain/${encodeURIComponent(trackId)}?user_id=${encodeURIComponent(uid)}`);
       set({ explanation: res.data });
     } catch (e) {
@@ -767,10 +767,10 @@ export const useStore = create((set, get) => ({
     set({ isLoadingPlatformData: true });
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
+      const queryParam = user?.id ? `?user_id=${encodeURIComponent(user.id)}&platform=${platform}` : `?platform=${platform}`;
       const [profRes, plRes] = await Promise.all([
-        axios.get(`${API_BASE}/migration/profile?user_id=${encodeURIComponent(uid)}&platform=${platform}`),
-        axios.get(`${API_BASE}/migration/playlists?user_id=${encodeURIComponent(uid)}&platform=${platform}`)
+        axios.get(`${API_BASE}/migration/profile${queryParam}`),
+        axios.get(`${API_BASE}/migration/playlists${queryParam}`)
       ]);
       if (platform === 'spotify') {
         set({ spotifyProfile: profRes.data, spotifyPlaylists: plRes.data, isLoadingPlatformData: false });
@@ -819,9 +819,8 @@ export const useStore = create((set, get) => ({
     set({ isMigratingExecution: true });
     try {
       const user = get().user;
-      const uid = user?.id || 'astitva_demo_user';
       const res = await axios.post(`${API_BASE}/migration/execute`, {
-        user_id: uid,
+        user_id: user?.id || undefined,
         source_platform: settings.sourcePlatform,
         target_platform: settings.targetPlatform,
         playlist_title: settings.title,

@@ -53,7 +53,6 @@ async def ingest_spotify(background_tasks: BackgroundTasks):
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "spotify", "status": "Ingesting tracks and audio features..."})
             tracks = ingestor.fetch_listening_data()
             count = GraphLoader.load_tracks_batch(profile["id"], tracks)
-            GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
 
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "spotify", "status": f"Loaded {count} Spotify tracks. Running GDS algorithms..."})
             await run_gds_pipeline_async()
@@ -80,14 +79,12 @@ async def ingest_youtube(background_tasks: BackgroundTasks):
                 GraphLoader.upsert_user(profile)
                 tracks = await g_ingestor.fetch_listening_data()
                 count = GraphLoader.load_tracks_batch(profile["id"], tracks)
-                GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
             else:
                 ingestor = YouTubeMusicIngestor(auth_headers=headers)
                 profile = ingestor.fetch_user_profile()
                 GraphLoader.upsert_user(profile)
                 tracks = ingestor.fetch_listening_data()
                 count = GraphLoader.load_tracks_batch(profile["id"], tracks)
-                GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
 
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "youtube", "status": f"Loaded {count} YouTube tracks. Running GDS algorithms..."})
             await run_gds_pipeline_async()
@@ -104,7 +101,10 @@ async def ingest_youtube(background_tasks: BackgroundTasks):
 async def sync_youtube_custom(request: Request, background_tasks: BackgroundTasks):
     """Sync YouTube Music via Playlist URL or Artist/Genre Search term"""
     body = await request.json()
-    user_id = body.get("user_id", "astitva_demo_user")
+    user_id = body.get("user_id")
+    if not user_id:
+        sess_user = SESSION_STORE.get("current_user")
+        user_id = sess_user.get("id", "demo_user") if sess_user else "demo_user"
     playlist_url = body.get("playlist_url")
     artists_search = body.get("artists_search")
 
@@ -144,8 +144,10 @@ async def ingest_demo(background_tasks: BackgroundTasks):
     """Instant one-click seeding of cross-platform Spotify + YouTube taste graph"""
     async def _do_demo_seed():
         try:
+            sess_user = SESSION_STORE.get("current_user")
+            seed_uid = sess_user.get("id", "demo_user") if sess_user else "demo_user"
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "demo", "status": "Seeding unified Spotify & YouTube taste graph..."})
-            res = GraphLoader.seed_mock_dataset("astitva_demo_user")
+            res = GraphLoader.seed_mock_dataset(seed_uid)
             
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "demo", "status": f"Seeded {res['tracks_loaded']} tracks across Electronic, Rock, HipHop, Bollywood. Running GDS..."})
             await run_gds_pipeline_async()

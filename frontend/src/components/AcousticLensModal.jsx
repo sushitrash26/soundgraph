@@ -135,7 +135,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
         const formData = new FormData();
         const extension = snapshot.type.includes('webm') ? 'webm' : 'wav';
         formData.append('file', snapshot, `probe.${extension}`);
-        formData.append('user_id', user?.id || 'astitva_demo_user');
+        if (user?.id) formData.append('user_id', user.id);
         if (hint.trim()) formData.append('hint', hint.trim());
 
         axios.post('http://localhost:8001/vibe/identify-audio', formData)
@@ -170,7 +170,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
         const formData = new FormData();
         const extension = audioBlob.type.includes('webm') ? 'webm' : 'wav';
         formData.append('file', audioBlob, `snippet.${extension}`);
-        formData.append('user_id', user?.id || 'astitva_demo_user');
+        if (user?.id) formData.append('user_id', user.id);
         if (hint.trim()) {
           formData.append('hint', hint.trim());
         }

@@ -28,11 +28,16 @@ class FrontierFetcher:
         return cls._ytmusic
 
     @classmethod
-    def expand_frontier_for_prompt(cls, prompt: str, user_id: str = "astitva_demo_user", limit: int = 5) -> List[Dict[str, Any]]:
+    def expand_frontier_for_prompt(cls, prompt: str, user_id: Optional[str] = None, limit: int = 5) -> List[Dict[str, Any]]:
         """
         Dynamically discovers, embeds, and ingests fresh songs for any niche prompt or sound.
         """
-        logger.info(f"Triggering Dynamic Frontier Expansion for prompt: \"{prompt}\"")
+        if not user_id:
+            from backend.api.routes.auth import SESSION_STORE
+            sess_user = SESSION_STORE.get("current_user")
+            user_id = sess_user.get("id", "demo_user") if sess_user else "demo_user"
+
+        logger.info(f"Triggering Dynamic Frontier Expansion for prompt: \"{prompt}\" (user: {user_id})")
         yt = cls.get_ytmusic()
         raw_candidates = []
 
@@ -100,7 +105,7 @@ class FrontierFetcher:
         return raw_candidates
 
     @classmethod
-    async def expand_frontier_async_broadcast(cls, prompt: str, user_id: str = "astitva_demo_user", limit: int = 4):
+    async def expand_frontier_async_broadcast(cls, prompt: str, user_id: Optional[str] = None, limit: int = 4):
         """
         Decoupled Asynchronous Worker:
         Discovers, embeds, and loads candidate tracks in background,

@@ -29,7 +29,7 @@ class AcousticLensService:
         cls,
         audio_bytes: bytes,
         mime_type: str = "audio/webm",
-        user_id: str = "astitva_demo_user",
+        user_id: Optional[str] = None,
         text_hint: Optional[str] = None
     ) -> Dict[str, Any]:
         api_key = settings.GEMINI_API_KEY

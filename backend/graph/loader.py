@@ -204,9 +204,9 @@ class GraphLoader:
         """Seeds realistic cross-platform listening history for instant testing/demo"""
         GraphLoader.upsert_user({
             "id": user_id,
-            "name": "Astitva Pathak",
+            "name": "SoundGraph Explorer",
             "source": "merged",
-            "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"
+            "avatar_url": ""
         })
 
         tracks = [

@@ -72,7 +72,7 @@ export default function NavbarProfileDropdown({ activeTab, setActiveTab }) {
         )}
 
         <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#fff' }}>
-          {user?.name || 'Astitva'}
+          {user?.name || user?.email?.split('@')[0] || 'My Profile'}
         </span>
 
         <ChevronDown size={14} color="#9B9B9B" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
@@ -102,7 +102,7 @@ export default function NavbarProfileDropdown({ activeTab, setActiveTab }) {
             marginBottom: '4px'
           }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#FFFFFF' }}>
-              {user?.name || 'Astitva'}
+              {user?.name || user?.email?.split('@')[0] || 'Connected Profile'}
             </div>
             <div style={{ fontSize: '11px', color: '#9B9B9B', marginTop: '2px' }}>
               Unified Taste Identity

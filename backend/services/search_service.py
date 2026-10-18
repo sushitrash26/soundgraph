@@ -228,7 +228,7 @@ class SearchService:
         return target_obj
 
     @classmethod
-    async def search_and_bridge(cls, query: str, user_id: str = "astitva_demo_user", limit: int = 10) -> Dict[str, Any]:
+    async def search_and_bridge(cls, query: str, user_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
         """
         Executes the Bridged Taste Recommendation Network:
         1. Resolves target song.

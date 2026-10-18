@@ -21,7 +21,7 @@ class MigrationService:
 
     @classmethod
     def get_platform_profile(cls, user_id: str, platform: str) -> Dict[str, Any]:
-        """Queries Neo4j user taste subgraph filtered specifically by platform source."""
+        """Queries Neo4j user taste subgraph filtered specifically by platform source for any user profile."""
         plat = platform.lower().strip()
         source_filter = "youtube" if plat in ["youtube", "yt"] else "spotify"
 
@@ -34,9 +34,9 @@ class MigrationService:
             WITH count(DISTINCT t) AS total_tracks,
                  collect(DISTINCT a.name) AS all_artists,
                  collect(DISTINCT g.name) AS all_genres,
-                 avg(coalesce(t.energy, 0.65)) AS avg_energy,
-                 avg(coalesce(t.valence, 0.60)) AS avg_valence,
-                 avg(coalesce(t.danceability, 0.65)) AS avg_danceability
+                 avg(coalesce(t.energy, 0.5)) AS avg_energy,
+                 avg(coalesce(t.valence, 0.5)) AS avg_valence,
+                 avg(coalesce(t.danceability, 0.5)) AS avg_danceability
             RETURN total_tracks,
                    all_artists[0..8] AS top_artists,
                    all_genres[0..6] AS top_genres,
@@ -48,17 +48,8 @@ class MigrationService:
             data = rows[0] if rows else {}
 
             total_tracks = data.get("total_tracks") or 0
-            # If Spotify tracks in DB are low for demo, fallback to a sensible count
-            if source_filter == "spotify" and total_tracks == 0:
-                total_tracks = 42
-
             top_artists = [a for a in data.get("top_artists", []) if a]
-            if not top_artists:
-                top_artists = ["The Weeknd", "Daft Punk", "Tame Impala", "Arctic Monkeys"] if source_filter == "spotify" else ["Daft Punk", "Julian Casablancas", "Juice WRLD", "Kendrick Lamar"]
-
             top_genres = [g for g in data.get("top_genres", []) if g]
-            if not top_genres:
-                top_genres = ["indie pop", "electronic", "synthpop", "r&b"]
 
             return {
                 "platform": source_filter,
@@ -67,34 +58,34 @@ class MigrationService:
                 "top_artists": top_artists,
                 "top_genres": top_genres,
                 "radar": {
-                    "energy": data.get("energy") or 0.68,
-                    "valence": data.get("valence") or 0.62,
-                    "danceability": data.get("danceability") or 0.66
+                    "energy": data.get("energy") if total_tracks > 0 else 0.0,
+                    "valence": data.get("valence") if total_tracks > 0 else 0.0,
+                    "danceability": data.get("danceability") if total_tracks > 0 else 0.0
                 }
             }
         except Exception as e:
-            logger.error(f"Error fetching platform profile for {platform}: {e}")
+            logger.error(f"Error fetching platform profile for user {user_id} on {platform}: {e}")
             return {
                 "platform": source_filter,
                 "display_name": f"{source_filter.title()} Music Library",
-                "total_tracks": 168 if source_filter == "youtube" else 35,
-                "top_artists": ["Daft Punk", "The Weeknd", "Tame Impala"],
-                "top_genres": ["indie pop", "electronic", "r&b"],
-                "radar": {"energy": 0.65, "valence": 0.60, "danceability": 0.65}
+                "total_tracks": 0,
+                "top_artists": [],
+                "top_genres": [],
+                "radar": {"energy": 0.0, "valence": 0.0, "danceability": 0.0}
             }
 
     @classmethod
     async def get_platform_playlists(cls, user_id: str, platform: str) -> List[Dict[str, Any]]:
         """
-        Fetches user playlists for a specific platform.
-        Synthesizes both live connected playlists and ingested graph collections.
+        Dynamically fetches user playlists for a specific platform.
+        Synthesizes live connected OAuth playlists and ingested graph collections for any profile.
         """
         plat = platform.lower().strip()
         playlists = []
 
         if plat in ["youtube", "yt"]:
-            # 1. Fetch Liked Tracks from Neo4j (YouTube Liked Music)
             try:
+                # 1. Real YouTube tracks ingested for this specific user in Neo4j
                 yt_tracks_q = """
                 MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)
                 WHERE t.source = 'youtube' OR t.id STARTS WITH 'youtube:'
@@ -118,24 +109,25 @@ class MigrationService:
                         "duration_ms": r["duration_ms"]
                     })
 
-                playlists.append({
-                    "id": "yt_liked_music",
-                    "title": "Liked Music",
-                    "description": "Your auto-synced liked videos and songs from YouTube Music",
-                    "cover_url": liked_tracks[0]["cover_url"] if liked_tracks else "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300",
-                    "track_count": len(liked_tracks),
-                    "privacy": "private",
-                    "source": "youtube",
-                    "tracks": liked_tracks
-                })
+                if liked_tracks:
+                    playlists.append({
+                        "id": "yt_liked_music",
+                        "title": "Liked Music",
+                        "description": "Your auto-synced liked videos and songs from YouTube Music",
+                        "cover_url": liked_tracks[0]["cover_url"] if liked_tracks[0].get("cover_url") else "",
+                        "track_count": len(liked_tracks),
+                        "privacy": "private",
+                        "source": "youtube",
+                        "tracks": liked_tracks
+                    })
 
-                # Check if user has live custom playlists from Google OAuth token
+                # 2. Check if user has live custom playlists from Google OAuth token
                 token = await TokenManager.get_valid_token(user_id, "google")
                 if token:
                     async with httpx.AsyncClient(timeout=10.0) as client:
                         pl_res = await client.get(
                             f"{YOUTUBE_API_BASE}/playlists",
-                            params={"part": "snippet,contentDetails", "mine": "true", "maxResults": 10},
+                            params={"part": "snippet,contentDetails", "mine": "true", "maxResults": 25},
                             headers={"Authorization": f"Bearer {token}"}
                         )
                         if pl_res.status_code == 200:
@@ -149,18 +141,19 @@ class MigrationService:
                                     "id": f"yt_pl_{p_id}",
                                     "title": p_title,
                                     "description": p_snip.get("description") or "YouTube Music Playlist",
-                                    "cover_url": p_thumb or "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300",
+                                    "cover_url": p_thumb,
                                     "track_count": p_count,
-                                    "privacy": "public",
+                                    "privacy": item.get("status", {}).get("privacyStatus", "private"),
                                     "source": "youtube",
                                     "tracks": []
                                 })
             except Exception as e:
-                logger.warning(f"Error fetching YouTube playlists: {e}")
+                logger.warning(f"Error fetching YouTube playlists for {user_id}: {e}")
 
         else:
             # Spotify Playlists
             try:
+                # 1. Real Spotify tracks ingested for this user in Neo4j
                 sp_tracks_q = """
                 MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)
                 WHERE t.source = 'spotify' OR t.id STARTS WITH 'spotify:'
@@ -169,7 +162,8 @@ class MigrationService:
                        collect(DISTINCT a.name) AS artists,
                        coalesce(t.cover_url, '') AS cover_url,
                        coalesce(t.duration_ms, 210000) AS duration_ms
-                LIMIT 50
+                ORDER BY coalesce(r.play_count, 1) DESC
+                LIMIT 100
                 """
                 sp_rows = neo4j_conn.query(sp_tracks_q, {"user_id": user_id})
                 sp_tracks = []
@@ -182,51 +176,79 @@ class MigrationService:
                         "duration_ms": r["duration_ms"]
                     })
 
-                # If user has few Spotify tracks in DB, populate with top library tracks
-                if len(sp_tracks) < 5:
-                    top_q = """
-                    MATCH (t:Track)
-                    OPTIONAL MATCH (t)-[:BY]->(a:Artist)
-                    WITH t, collect(DISTINCT a.name) AS artists
-                    RETURN t.id AS id, t.name AS name,
-                           artists,
-                           coalesce(t.cover_url, '') AS cover_url
-                    ORDER BY coalesce(t.popularity, 50) DESC
-                    LIMIT 25
-                    """
-                    top_rows = neo4j_conn.query(top_q)
-                    for r in (top_rows or []):
-                        sp_tracks.append({
-                            "id": r["id"],
-                            "name": r["name"],
-                            "artist": ", ".join(r["artists"]) if r["artists"] else "Artist",
-                            "cover_url": r["cover_url"] or "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300",
-                            "duration_ms": 200000
-                        })
+                if sp_tracks:
+                    playlists.append({
+                        "id": "sp_saved_tracks",
+                        "title": "Saved Spotify Tracks",
+                        "description": "Your library tracks indexed from Spotify",
+                        "cover_url": sp_tracks[0]["cover_url"] if sp_tracks[0].get("cover_url") else "",
+                        "track_count": len(sp_tracks),
+                        "privacy": "private",
+                        "source": "spotify",
+                        "tracks": sp_tracks
+                    })
 
-                playlists.append({
-                    "id": "sp_liked_songs",
-                    "title": "Saved Spotify Tracks",
-                    "description": "Your favorite saved tracks and heavy rotation on Spotify",
-                    "cover_url": sp_tracks[0]["cover_url"] if sp_tracks else "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=300",
-                    "track_count": len(sp_tracks),
-                    "privacy": "private",
-                    "source": "spotify",
-                    "tracks": sp_tracks
-                })
-
-                playlists.append({
-                    "id": "sp_deck_tokyo",
-                    "title": "Midnight Tokyo Drives",
-                    "description": "Late-night synthwave and French house curated on SoundGraph",
-                    "cover_url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300",
-                    "track_count": 14,
-                    "privacy": "public",
-                    "source": "spotify",
-                    "tracks": sp_tracks[:14]
-                })
+                # 2. Check live Spotify playlists via user's Spotify OAuth token
+                sp_token = await TokenManager.get_valid_token(user_id, "spotify")
+                if sp_token:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        pl_res = await client.get(
+                            "https://api.spotify.com/v1/me/playlists?limit=25",
+                            headers={"Authorization": f"Bearer {sp_token}"}
+                        )
+                        if pl_res.status_code == 200:
+                            for item in pl_res.json().get("items", []):
+                                p_id = item.get("id")
+                                p_title = item.get("name", "Untitled Playlist")
+                                p_count = item.get("tracks", {}).get("total", 0)
+                                images = item.get("images", [])
+                                p_thumb = images[0].get("url", "") if images else ""
+                                playlists.append({
+                                    "id": f"sp_pl_{p_id}",
+                                    "title": p_title,
+                                    "description": item.get("description") or "Spotify Playlist",
+                                    "cover_url": p_thumb,
+                                    "track_count": p_count,
+                                    "privacy": "public" if item.get("public") else "private",
+                                    "source": "spotify",
+                                    "tracks": []
+                                })
             except Exception as e:
-                logger.warning(f"Error fetching Spotify playlists: {e}")
+                logger.warning(f"Error fetching Spotify playlists for {user_id}: {e}")
+
+        # 3. Add any custom decks created by this user in SoundGraph for cross-platform curation
+        try:
+            deck_q = """
+            MATCH (u:User {id: $user_id})-[:CREATED_DECK]->(d:Deck)
+            OPTIONAL MATCH (d)-[:CONTAINS]->(t:Track)
+            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+            WITH d, t, collect(DISTINCT a.name) AS artists
+            WITH d, collect(DISTINCT {
+                id: t.id,
+                name: t.name,
+                artist: head(artists),
+                cover_url: coalesce(t.cover_url, ''),
+                duration_ms: coalesce(t.duration_ms, 210000)
+            }) AS tracks
+            WHERE size(tracks) > 0
+            RETURN d.id AS id, d.name AS title, coalesce(d.description, '') AS description, tracks, size(tracks) AS track_count
+            """
+            deck_rows = neo4j_conn.query(deck_q, {"user_id": user_id})
+            for d in (deck_rows or []):
+                d_tracks = [t for t in d.get("tracks", []) if t.get("name")]
+                if d_tracks:
+                    playlists.append({
+                        "id": f"sg_deck_{d['id']}",
+                        "title": d["title"],
+                        "description": d["description"] or "SoundGraph Curated Deck",
+                        "cover_url": d_tracks[0].get("cover_url", ""),
+                        "track_count": len(d_tracks),
+                        "privacy": "private",
+                        "source": plat,
+                        "tracks": d_tracks
+                    })
+        except Exception as err:
+            logger.warning(f"Error fetching user decks for {user_id}: {err}")
 
         return playlists
 
@@ -258,42 +280,68 @@ class MigrationService:
             async with sem:
                 try:
                     if target == "spotify":
-                        # Search Deezer / iTunes for exact universal ISRC and clean metadata
-                        deezer_url = f"https://api.deezer.com/search?q={clean_title} {artist}"
-                        d_res = await client.get(deezer_url, timeout=5.0)
-                        if d_res.status_code == 200:
-                            data = d_res.json()
-                            if data.get("data"):
-                                top_hit = data["data"][0]
-                                hit_title = top_hit.get("title")
-                                hit_artist = top_hit.get("artist", {}).get("name", artist)
-                                hit_id = top_hit.get("id")
-                                
-                                # Simulated canonical Spotify URI
-                                clean_slug = re.sub(r'[^a-zA-Z0-9]', '', f"{hit_artist}{hit_title}")[:22]
-                                spotify_uri = f"spotify:track:{clean_slug}"
-                                spotify_url = f"https://open.spotify.com/search/{clean_title}%20{hit_artist}"
+                        # 1. Check if track is already in Neo4j graph with Spotify mapping
+                        db_match = neo4j_conn.query(
+                            """
+                            MATCH (t:Track)
+                            WHERE (t.source = 'spotify' OR t.id STARTS WITH 'spotify:track:')
+                              AND toLower(t.name) = toLower($name)
+                            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+                            RETURN t.id AS id, t.name AS name, t.cover_url AS cover_url, head(collect(a.name)) AS artist
+                            LIMIT 1
+                            """,
+                            {"name": clean_title}
+                        )
+                        if db_match and db_match[0].get("id"):
+                            row = db_match[0]
+                            return {
+                                "source_id": t.get("id"),
+                                "source_title": title,
+                                "source_artist": artist,
+                                "matched_title": row.get("name") or clean_title,
+                                "matched_artist": row.get("artist") or artist,
+                                "target_uri": row["id"],
+                                "target_url": f"https://open.spotify.com/search/{clean_title}%20{artist}",
+                                "confidence": 99,
+                                "status": "matched"
+                            }
 
-                                return {
-                                    "source_id": t.get("id"),
-                                    "source_title": title,
-                                    "source_artist": artist,
-                                    "matched_title": hit_title,
-                                    "matched_artist": hit_artist,
-                                    "target_uri": spotify_uri,
-                                    "target_url": spotify_url,
-                                    "confidence": 98,
-                                    "status": "matched"
-                                }
+                        # 2. Query iTunes Search API for canonical metadata
+                        try:
+                            it_res = await client.get(
+                                "https://itunes.apple.com/search",
+                                params={"term": f"{clean_title} {artist}".strip(), "entity": "song", "limit": 1},
+                                timeout=5.0
+                            )
+                            if it_res.status_code == 200:
+                                results = it_res.json().get("results", [])
+                                if results:
+                                    hit = results[0]
+                                    hit_title = hit.get("trackName") or clean_title
+                                    hit_artist = hit.get("artistName") or artist
+                                    return {
+                                        "source_id": t.get("id"),
+                                        "source_title": title,
+                                        "source_artist": artist,
+                                        "matched_title": hit_title,
+                                        "matched_artist": hit_artist,
+                                        "target_uri": f"{hit_artist} - {hit_title}",
+                                        "target_url": f"https://open.spotify.com/search/{clean_title}%20{hit_artist}",
+                                        "confidence": 95,
+                                        "status": "matched"
+                                    }
+                        except Exception as it_err:
+                            logger.debug(f"iTunes search lookup: {it_err}")
 
                         # Fallback match using cleaned title
+                        line_rep = f"{artist} - {clean_title}" if artist else clean_title
                         return {
                             "source_id": t.get("id"),
                             "source_title": title,
                             "source_artist": artist,
                             "matched_title": clean_title,
                             "matched_artist": artist or "Various Artists",
-                            "target_uri": f"spotify:track:{re.sub(r'[^a-zA-Z0-9]', '', clean_title)[:22]}",
+                            "target_uri": line_rep,
                             "target_url": f"https://open.spotify.com/search/{clean_title}",
                             "confidence": 88,
                             "status": "matched"
@@ -370,8 +418,8 @@ class MigrationService:
 
         # Execution Mode A: 1-Click Clipboard Bridge (for YouTube ➔ Spotify)
         if target == "spotify" and method == "clipboard":
-            uris = [t.get("target_uri") or f"spotify:track:{t.get('source_id')}" for t in tracks]
-            clipboard_lines = "\n".join(uris)
+            uris = [t.get("target_uri") or f"{t.get('matched_artist', '')} - {t.get('matched_title', '')}".strip(' -') or t.get('name', 'Track') for t in tracks]
+            clipboard_lines = "\n".join([u for u in uris if u])
             return {
                 "status": "success",
                 "method": "clipboard",
@@ -449,7 +497,7 @@ class MigrationService:
             }
 
         # Execution Mode C: Target is Spotify (Direct Sync)
-        uris = [t.get("target_uri") or f"spotify:track:{t.get('source_id')}" for t in tracks]
+        uris = [t.get("target_uri") or f"{t.get('matched_artist', '')} - {t.get('matched_title', '')}".strip(' -') or t.get('name', 'Track') for t in tracks]
         return {
             "status": "success",
             "method": "direct",
@@ -457,7 +505,7 @@ class MigrationService:
             "playlist_title": safe_title,
             "track_count": len(tracks),
             "uris": uris,
-            "clipboard_text": "\n".join(uris),
+            "clipboard_text": "\n".join([u for u in uris if u]),
             "playlist_url": f"https://open.spotify.com/search/{safe_title}",
             "message": f"Successfully created '{safe_title}' with {len(tracks)} tracks on Spotify!"
         }

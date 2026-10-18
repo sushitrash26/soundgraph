@@ -2,11 +2,21 @@ from fastapi import APIRouter, Query, HTTPException, Body
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from backend.services.deck_service import DeckService
+from backend.api.routes.auth import SESSION_STORE
 
 router = APIRouter(prefix="/decks", tags=["Personalized Decks"])
 
+def resolve_uid(user_id: Optional[str] = None) -> str:
+    """Dynamically resolves the active user ID from request or session store."""
+    if user_id and user_id.strip():
+        return user_id.strip()
+    session_user = SESSION_STORE.get("current_user")
+    if session_user and session_user.get("id"):
+        return session_user["id"]
+    return ""
+
 class CreateDeckRequest(BaseModel):
-    user_id: str = "astitva_demo_user"
+    user_id: Optional[str] = None
     name: str
     mood: Optional[str] = "general"
     track_ids: Optional[List[str]] = []
@@ -16,13 +26,17 @@ class AddTrackRequest(BaseModel):
     track_id: str
 
 @router.get("")
-def list_decks(user_id: str = Query("astitva_demo_user")):
-    return DeckService.list_user_decks(user_id=user_id)
+def list_decks(user_id: Optional[str] = Query(None)):
+    uid = resolve_uid(user_id)
+    return DeckService.list_user_decks(user_id=uid)
 
 @router.post("")
 def create_deck(payload: CreateDeckRequest):
+    uid = resolve_uid(payload.user_id)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required to create a deck.")
     return DeckService.create_deck(
-        user_id=payload.user_id,
+        user_id=uid,
         name=payload.name,
         mood=payload.mood or "general",
         track_ids=payload.track_ids or [],
@@ -30,10 +44,10 @@ def create_deck(payload: CreateDeckRequest):
     )
 
 @router.get("/{deck_id}")
-def get_deck_cards(deck_id: str, user_id: str = Query("astitva_demo_user")):
-    deck = DeckService.get_deck_cards(deck_id=deck_id, user_id=user_id)
+def get_deck_cards(deck_id: str, user_id: Optional[str] = Query(None)):
+    uid = resolve_uid(user_id)
+    deck = DeckService.get_deck_cards(deck_id=deck_id, user_id=uid)
     if not deck or not deck.get("cards"):
-        # return empty deck payload gracefully
         return deck
     return deck
 
@@ -50,6 +64,7 @@ def remove_track_from_deck(deck_id: str, track_id: str):
     return {"status": "success", "removed": success}
 
 @router.delete("/{deck_id}")
-def delete_deck(deck_id: str, user_id: str = Query("astitva_demo_user")):
-    success = DeckService.delete_deck(deck_id=deck_id, user_id=user_id)
+def delete_deck(deck_id: str, user_id: Optional[str] = Query(None)):
+    uid = resolve_uid(user_id)
+    success = DeckService.delete_deck(deck_id=deck_id, user_id=uid)
     return {"status": "success", "deleted": success}

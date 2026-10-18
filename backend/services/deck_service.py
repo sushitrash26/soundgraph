@@ -12,7 +12,7 @@ class DeckService:
     """
 
     @classmethod
-    def list_user_decks(cls, user_id: str = "astitva_demo_user") -> List[Dict[str, Any]]:
+    def list_user_decks(cls, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         query = """
         MATCH (u:User {id: $user_id})-[:CREATED]->(d:Deck)
         OPTIONAL MATCH (d)-[r:CONTAINS]->(t:Track)
@@ -94,7 +94,7 @@ class DeckService:
             return {"id": deck_id, "name": clean_name, "track_count": 0}
 
     @classmethod
-    def get_deck_cards(cls, deck_id: str, user_id: str = "astitva_demo_user") -> Dict[str, Any]:
+    def get_deck_cards(cls, deck_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Loads cards for swiping and playing on dashboard."""
         deck_meta_q = "MATCH (d:Deck {id: $deck_id}) RETURN d.id AS id, d.name AS name, d.mood AS mood, d.cover_url AS cover_url"
         meta_res = neo4j_conn.query(deck_meta_q, {"deck_id": deck_id})
@@ -180,7 +180,7 @@ class DeckService:
             return False
 
     @classmethod
-    def delete_deck(cls, deck_id: str, user_id: str = "astitva_demo_user") -> bool:
+    def delete_deck(cls, deck_id: str, user_id: Optional[str] = None) -> bool:
         del_deck_q = """
         MATCH (u:User {id: $user_id})-[:CREATED]->(d:Deck {id: $deck_id})
         DETACH DELETE d

@@ -122,7 +122,7 @@ export default function YouTubeHub() {
               Liked YouTube Tracks
             </div>
             <div style={{ fontSize: '26px', fontWeight: '800', color: '#FFFFFF', marginTop: '6px' }}>
-              {youtubeProfile?.total_tracks || 169}
+              {youtubeProfile?.total_tracks || 0}
             </div>
             <div style={{ fontSize: '11px', color: '#f87171', marginTop: '4px' }}>
               Indexed in Cross-Platform Graph
@@ -135,11 +135,17 @@ export default function YouTubeHub() {
               Top YouTube Artists
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-              {(youtubeProfile?.top_artists || ['Daft Punk', 'Julian Casablancas', 'Kendrick Lamar', 'Juice WRLD']).slice(0, 3).map((a, i) => (
-                <span key={i} style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.12)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
-                  {a}
+              {youtubeProfile?.top_artists && youtubeProfile.top_artists.length > 0 ? (
+                youtubeProfile.top_artists.slice(0, 3).map((a, i) => (
+                  <span key={i} style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.12)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                    {a}
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: '11.5px', color: '#666', fontStyle: 'italic', paddingTop: '2px' }}>
+                  No artists indexed yet
                 </span>
-              ))}
+              )}
             </div>
           </div>
 
@@ -149,11 +155,17 @@ export default function YouTubeHub() {
               Top YouTube Genres
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-              {(youtubeProfile?.top_genres || ['Electronic', 'Indie Pop', 'Hip-Hop']).slice(0, 3).map((g, i) => (
-                <span key={i} style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '6px', background: '#1E1E26', color: '#CCCCCC', border: '1px solid #2D2D38' }}>
-                  {g}
+              {youtubeProfile?.top_genres && youtubeProfile.top_genres.length > 0 ? (
+                youtubeProfile.top_genres.slice(0, 3).map((g, i) => (
+                  <span key={i} style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '6px', background: '#1E1E26', color: '#CCCCCC', border: '1px solid #2D2D38' }}>
+                    {g}
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: '11.5px', color: '#666', fontStyle: 'italic', paddingTop: '2px' }}>
+                  No genres indexed yet
                 </span>
-              ))}
+              )}
             </div>
           </div>
 
@@ -162,12 +174,20 @@ export default function YouTubeHub() {
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Acoustic Profile
             </div>
-            <div style={{ fontSize: '12px', color: '#CCCCCC', marginTop: '8px', lineHeight: '18px' }}>
-              Energy: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.energy || 0.68) * 100)}%</strong> · Dance: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.danceability || 0.66) * 100)}%</strong>
-            </div>
-            <div style={{ fontSize: '11px', color: '#9B9B9B', marginTop: '2px' }}>
-              Valence: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.valence || 0.62) * 100)}%</strong>
-            </div>
+            {youtubeProfile?.total_tracks > 0 ? (
+              <>
+                <div style={{ fontSize: '12px', color: '#CCCCCC', marginTop: '8px', lineHeight: '18px' }}>
+                  Energy: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.energy || 0) * 100)}%</strong> · Dance: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.danceability || 0) * 100)}%</strong>
+                </div>
+                <div style={{ fontSize: '11px', color: '#9B9B9B', marginTop: '2px' }}>
+                  Valence: <strong style={{ color: '#FFFFFF' }}>{Math.round((youtubeProfile?.radar?.valence || 0) * 100)}%</strong>
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: '11.5px', color: '#666', fontStyle: 'italic', marginTop: '8px' }}>
+                Connect account to analyze acoustics
+              </div>
+            )}
           </div>
         </div>
       </div>

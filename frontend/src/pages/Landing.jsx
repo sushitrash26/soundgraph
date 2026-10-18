@@ -90,7 +90,7 @@ const CARD_STACK_DATA = [
     valence: 0.68,
     bpm: 186,
     reason: 'Shared synthesizer timbre and high tempo bridge from Blinding Lights',
-    graphPath: 'Astitva listens to Blinding Lights similar to Starboy'
+    graphPath: 'User listens to Blinding Lights similar to Starboy'
   },
   {
     id: 'gumaan',
@@ -102,7 +102,7 @@ const CARD_STACK_DATA = [
     valence: 0.39,
     bpm: 92,
     reason: 'Acoustic guitar cadence and Urdu lyrical symmetry matching Secrets',
-    graphPath: 'Astitva listens to Secrets similar to Gumaan'
+    graphPath: 'User listens to Secrets similar to Gumaan'
   },
   {
     id: 'snooze',
@@ -114,7 +114,7 @@ const CARD_STACK_DATA = [
     valence: 0.44,
     bpm: 143,
     reason: 'Rhythm and blues harmonic progression linked to Kill Bill',
-    graphPath: 'Astitva listens to Kill Bill similar to Snooze'
+    graphPath: 'User listens to Kill Bill similar to Snooze'
   }
 ];
 
@@ -569,7 +569,7 @@ export default function Landing() {
                 }}
               >
                 <SparkleIcon size={16} color="#FFFFFF" />
-                <span>{isLoading ? 'Loading session...' : 'Instant demo profile (Astitva Pathak)'}</span>
+                <span>{isLoading ? 'Loading session...' : 'Instant Guest Profile'}</span>
               </button>
 
               <button

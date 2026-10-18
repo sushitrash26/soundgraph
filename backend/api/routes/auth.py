@@ -188,9 +188,9 @@ async def google_callback(code: str = Query(...)):
 def guest_login():
     """Sets demo user session for instant exploration"""
     SESSION_STORE["current_user"] = {
-        "id": "astitva_demo_user",
-        "name": "Astitva Pathak",
-        "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+        "id": "demo_guest_user",
+        "name": "Guest Explorer",
+        "avatar_url": "",
         "primary_source": "unified_taste_graph",
     }
     return {"status": "success", "user": SESSION_STORE["current_user"]}

@@ -109,7 +109,7 @@ export default function AccountConnectBar() {
     setYtLoading(true);
     setYtSuccessMsg('');
     try {
-      let payload = { user_id: user?.id || 'astitva_demo_user' };
+      let payload = user?.id ? { user_id: user.id } : {};
       if (ytMode === 'playlist') {
         payload.playlist_url = playlistUrl.trim();
       } else if (ytMode === 'search') {
