@@ -282,7 +282,7 @@ export default function MoodChatModal() {
           {isChatLoading && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c084fc', fontSize: '12.5px', padding: '4px' }}>
               <Loader2 size={16} className="spin" />
-              <span>Analyzing graph topology & cross-platform affinities...</span>
+              <span>Curating tracks matching your vibe...</span>
             </div>
           )}
           <div ref={messagesEndRef} />

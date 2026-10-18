@@ -60,7 +60,7 @@ export const useStore = create((set, get) => ({
   chatMessages: [
     {
       role: 'assistant',
-      text: 'Hello. Ask me to discover music based on any mood, setting, or sound. I match candidates using your connected Spotify & YouTube graph topology.'
+      text: 'Hello! Ask me to discover music based on any mood, setting, or sound. I match tracks based on your connected Spotify and YouTube streaming taste.'
     }
   ],
   isChatLoading: false,

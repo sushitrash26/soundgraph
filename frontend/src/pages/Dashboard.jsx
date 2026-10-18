@@ -91,7 +91,7 @@ export default function Dashboard() {
                 color: '#a855f7',
                 marginBottom: '8px'
               }}>
-                <Radio size={13} /> Graph-RAG Multiverse Discovery
+                <Radio size={13} /> Personalized Discovery
               </div>
               <h1 style={{
                 fontSize: '28px',
@@ -105,7 +105,7 @@ export default function Dashboard() {
                 Curated Recommendations
               </h1>
               <p style={{ fontSize: '13px', color: '#9B9B9B', margin: 0, maxWidth: '580px' }}>
-                Infinite 3D card stream powered by Neo4j HNSW vector indices and LinUCB contextual bandits. Every swipe trains your latent graph weights.
+                Discover music tailored to your streaming taste. Preview 30 second audio clips, swipe right to like, or swipe left to pass.
               </p>
             </div>
 
@@ -175,13 +175,13 @@ export default function Dashboard() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Compass size={18} color="#06b6d4" />
+                  <Compass size={18} color="#a855f7" />
                   <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#FFFFFF', margin: 0, letterSpacing: '-0.02em' }}>
-                    Core Taste Anchors
+                    Favorite Artists
                   </h3>
                 </div>
                 <span style={{ fontSize: '12px', color: '#9B9B9B' }}>
-                  Architectural PageRank centers of your graph topology
+                  Most played and connected artists across your library
                 </span>
               </div>
 
@@ -207,17 +207,15 @@ export default function Dashboard() {
                     <div style={{ fontSize: '14px', fontWeight: '700', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {art.name}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#06b6d4' }}>
+                    <div style={{ fontSize: '11px', color: '#a855f7' }}>
                       {art.genres ? art.genres.slice(0, 2).join(' · ') : 'Artist'}
                     </div>
                     <div style={{
                       fontSize: '11px',
-                      fontFamily: 'var(--font-mono)',
                       color: '#9B9B9B',
-                      marginTop: '4px',
-                      fontVariantNumeric: 'tabular-nums'
+                      marginTop: '4px'
                     }}>
-                      Influence: {Math.round((art.pagerank || 0.15) * 100)}%
+                      Top Artist
                     </div>
                   </div>
                 ))}

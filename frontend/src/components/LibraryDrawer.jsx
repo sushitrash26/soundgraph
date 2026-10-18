@@ -3,22 +3,17 @@ import { useStore } from '../store/useStore';
 import { 
   Music, 
   Play, 
+  Pause,
   ExternalLink, 
   Sparkles, 
   Filter, 
   Search, 
   Heart, 
   ThumbsDown, 
-  Radio, 
-  Flame, 
-  Layers, 
   Disc, 
   User, 
-  BarChart3,
-  SlidersHorizontal,
-  Clock,
-  TrendingUp,
-  Volume2
+  Radio, 
+  Flame
 } from 'lucide-react';
 
 const SpotifyIcon = ({ size = 14 }) => (
@@ -41,7 +36,8 @@ export default function LibraryDrawer() {
     fetchTasteProfile, 
     playTrack, 
     currentTrack, 
-    isPlaying 
+    isPlaying,
+    setIsPlaying
   } = useStore();
 
   const [activeTab, setActiveTab] = useState('insights'); // 'insights', 'artists', 'playlists', 'tracks'
@@ -70,8 +66,7 @@ export default function LibraryDrawer() {
     likes = [],
     dislikes = [],
     stats = {},
-    vector_metrics = {},
-    personas = []
+    top_genres = []
   } = tasteProfile || {};
 
   const filteredFeedbackList = feedbackSubFilter === 'likes' 
@@ -89,6 +84,22 @@ export default function LibraryDrawer() {
     return `https://open.spotify.com/search/${q}`;
   };
 
+  const handlePlayToggle = (item) => {
+    const itemId = item.id || item.track_id;
+    const playingId = currentTrack?.id || currentTrack?.track_id;
+    if (playingId === itemId && isPlaying) {
+      setIsPlaying(false);
+    } else {
+      playTrack({ 
+        ...item, 
+        name: item.title || item.name, 
+        track_id: itemId,
+        cover_url: item.cover_url,
+        preview_url: item.preview_url 
+      });
+    }
+  };
+
   return (
     <div style={{
       background: '#181818',
@@ -101,8 +112,8 @@ export default function LibraryDrawer() {
       overflow: 'hidden',
       color: '#FFFFFF'
     }}>
-      {/* HUD Telemetry Header */}
-      <div style={{ marginBottom: '20px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{
@@ -113,124 +124,84 @@ export default function LibraryDrawer() {
               boxShadow: '0 0 10px #10b981'
             }} />
             <h2 style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.02em', margin: 0 }}>
-              Taste Ledger
+              Taste & Library
             </h2>
           </div>
           <span style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '12px',
-            padding: '4px 8px',
-            borderRadius: '6px',
+            padding: '4px 10px',
+            borderRadius: '999px',
             background: '#272727',
-            color: '#9B9B9B',
+            color: '#FFFFFF',
+            fontWeight: '600',
             fontVariantNumeric: 'tabular-nums'
           }}>
             {stats.total_stream_plays || 0} plays
           </span>
         </div>
         <p style={{ fontSize: '13px', color: '#9B9B9B', margin: 0 }}>
-          Real time cross platform analytics ingested directly from your streaming accounts.
+          Your listening history synced across Spotify and YouTube Music.
         </p>
       </div>
 
-      {/* Latent Vector Coordinates Radar (768-D Vector Projection) */}
+      {/* Taste Summary Cards */}
       <div style={{
-        background: '#1F1F1F',
-        border: '1px solid #272727',
-        borderRadius: '16px',
-        padding: '16px',
-        marginBottom: '20px'
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '8px',
+        marginBottom: '16px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '600', color: '#FFFFFF' }}>
-            <BarChart3 size={14} color="#06b6d4" /> Latent Vector Coordinates
+        <div style={{
+          background: '#1F1F1F',
+          border: '1px solid #272727',
+          borderRadius: '12px',
+          padding: '10px 14px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9B9B9B', marginBottom: '2px' }}>Liked Tracks</div>
+          <div style={{ fontSize: '16px', fontWeight: '700', color: '#10b981', fontFamily: 'var(--font-mono)' }}>
+            {likes.length}
           </div>
-          <span style={{
-            fontSize: '11px',
-            fontFamily: 'var(--font-mono)',
-            color: '#06b6d4',
-            fontVariantNumeric: 'tabular-nums'
-          }}>
-            Gemini 768-D
-          </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          {/* Energy */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9B9B9B' }}>
-              <span>Energy</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.round((vector_metrics.energy || 0.65) * 100)}%
-              </span>
-            </div>
-            <div style={{ width: '100%', height: '4px', background: '#272727', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{
-                width: `${Math.round((vector_metrics.energy || 0.65) * 100)}%`,
-                height: '100%',
-                background: '#a855f7',
-                transition: 'width 0.6s var(--ease-fluid)'
-              }} />
-            </div>
+        <div style={{
+          background: '#1F1F1F',
+          border: '1px solid #272727',
+          borderRadius: '12px',
+          padding: '10px 14px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9B9B9B', marginBottom: '2px' }}>Passed</div>
+          <div style={{ fontSize: '16px', fontWeight: '700', color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
+            {dislikes.length}
           </div>
+        </div>
 
-          {/* Valence */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9B9B9B' }}>
-              <span>Valence</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.round((vector_metrics.valence || 0.55) * 100)}%
-              </span>
-            </div>
-            <div style={{ width: '100%', height: '4px', background: '#272727', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{
-                width: `${Math.round((vector_metrics.valence || 0.55) * 100)}%`,
-                height: '100%',
-                background: '#06b6d4',
-                transition: 'width 0.6s var(--ease-fluid)'
-              }} />
-            </div>
+        <div style={{
+          background: '#1F1F1F',
+          border: '1px solid #272727',
+          borderRadius: '12px',
+          padding: '10px 14px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9B9B9B', marginBottom: '2px' }}>Top Genre</div>
+          <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {top_genres[0]?.name || 'All Vibes'}
           </div>
+        </div>
 
-          {/* Danceability */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9B9B9B' }}>
-              <span>Danceability</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.round((vector_metrics.danceability || 0.60) * 100)}%
-              </span>
-            </div>
-            <div style={{ width: '100%', height: '4px', background: '#272727', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{
-                width: `${Math.round((vector_metrics.danceability || 0.60) * 100)}%`,
-                height: '100%',
-                background: '#10b981',
-                transition: 'width 0.6s var(--ease-fluid)'
-              }} />
-            </div>
-          </div>
-
-          {/* Acousticness */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#9B9B9B' }}>
-              <span>Acousticness</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: '#FFFFFF', fontVariantNumeric: 'tabular-nums' }}>
-                {Math.round((vector_metrics.acousticness || 0.20) * 100)}%
-              </span>
-            </div>
-            <div style={{ width: '100%', height: '4px', background: '#272727', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{
-                width: `${Math.round((vector_metrics.acousticness || 0.20) * 100)}%`,
-                height: '100%',
-                background: '#f59e0b',
-                transition: 'width 0.6s var(--ease-fluid)'
-              }} />
-            </div>
+        <div style={{
+          background: '#1F1F1F',
+          border: '1px solid #272727',
+          borderRadius: '12px',
+          padding: '10px 14px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#9B9B9B', marginBottom: '2px' }}>Favorite Artist</div>
+          <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {top_artists[0]?.name || 'Various Artists'}
           </div>
         </div>
       </div>
 
-      {/* Main Technical Tabs Switcher */}
+      {/* Tabs Navigation */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
@@ -241,10 +212,10 @@ export default function LibraryDrawer() {
         marginBottom: '16px'
       }}>
         {[
-          { id: 'insights', label: 'Insights', icon: Heart },
+          { id: 'insights', label: 'Activity', icon: Heart },
           { id: 'artists', label: 'Artists', icon: User },
           { id: 'playlists', label: 'Playlists', icon: Disc },
-          { id: 'tracks', label: 'Library', icon: Music },
+          { id: 'tracks', label: 'Songs', icon: Music },
         ].map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.id;
@@ -278,74 +249,16 @@ export default function LibraryDrawer() {
       {/* Content Panels Area */}
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
 
-        {/* TAB 1: USER INSIGHTS & REAL-TIME FEEDBACK LEDGER */}
+        {/* TAB 1: ACTIVITY (LIKES AND DISLIKES) */}
         {activeTab === 'insights' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Feedback Stats Counter */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div style={{
-                background: '#1F1F1F',
-                border: '1px solid #272727',
-                borderRadius: '12px',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Heart size={16} color="#10b981" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#9B9B9B' }}>Recorded Likes</div>
-                  <div style={{ fontSize: '18px', fontWeight: '700', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: '#FFFFFF' }}>
-                    {likes.length}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{
-                background: '#1F1F1F',
-                border: '1px solid #272727',
-                borderRadius: '12px',
-                padding: '12px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <ThumbsDown size={16} color="#ef4444" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#9B9B9B' }}>Recorded Dislikes</div>
-                  <div style={{ fontSize: '18px', fontWeight: '700', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: '#FFFFFF' }}>
-                    {dislikes.length}
-                  </div>
-                </div>
-              </div>
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
             {/* Sub Filter Buttons: All, Likes, Dislikes */}
             <div style={{ display: 'flex', gap: '6px' }}>
               {[
-                { id: 'all', label: `All Feedback (${likes.length + dislikes.length})` },
+                { id: 'all', label: `All (${likes.length + dislikes.length})` },
                 { id: 'likes', label: `Liked (${likes.length})` },
-                { id: 'dislikes', label: `Disliked (${dislikes.length})` }
+                { id: 'dislikes', label: `Passed (${dislikes.length})` }
               ].map(sub => (
                 <button
                   key={sub.id}
@@ -357,8 +270,8 @@ export default function LibraryDrawer() {
                     borderColor: feedbackSubFilter === sub.id ? '#FFFFFF' : '#272727',
                     background: feedbackSubFilter === sub.id ? '#272727' : 'transparent',
                     color: feedbackSubFilter === sub.id ? '#FFFFFF' : '#9B9B9B',
-                    fontSize: '12px',
-                    fontWeight: '500',
+                    fontSize: '11px',
+                    fontWeight: '600',
                     cursor: 'pointer',
                     transition: 'all 0.2s var(--ease-fluid)'
                   }}
@@ -384,18 +297,20 @@ export default function LibraryDrawer() {
                     No Feedback Recorded Yet
                   </div>
                   <p style={{ fontSize: '12px', margin: 0 }}>
-                    Swipe right on cards to register likes, or left to register dislikes. Every action updates this ledger.
+                    Swipe right on cards to like, or swipe left to pass. Your taste activity appears here in real time.
                   </p>
                 </div>
               ) : (
                 filteredFeedbackList.map((item, idx) => {
-                  const isCurrent = (currentTrack?.track_id || currentTrack?.id) === item.id;
+                  const itemId = item.id || item.track_id;
+                  const isCurrent = (currentTrack?.track_id || currentTrack?.id) === itemId;
+                  const isCurrentPlaying = isCurrent && isPlaying;
                   const isLiked = (item.reward || 0) > 0;
                   return (
                     <div
                       key={idx}
                       style={{
-                        padding: '12px 14px',
+                        padding: '10px 12px',
                         background: isCurrent ? '#272727' : '#1F1F1F',
                         border: '1px solid',
                         borderColor: isCurrent ? '#a855f7' : '#272727',
@@ -408,18 +323,33 @@ export default function LibraryDrawer() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        <div style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '6px',
-                          background: isLiked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0
-                        }}>
-                          {isLiked ? <Heart size={14} color="#10b981" /> : <ThumbsDown size={14} color="#ef4444" />}
-                        </div>
+                        {item.cover_url ? (
+                          <img
+                            src={item.cover_url}
+                            alt=""
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '8px',
+                              objectFit: 'cover',
+                              flexShrink: 0
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            background: isLiked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            {isLiked ? <Heart size={16} color="#10b981" /> : <ThumbsDown size={16} color="#ef4444" />}
+                          </div>
+                        )}
+
                         <div style={{ minWidth: 0 }}>
                           <div style={{
                             fontSize: '13px',
@@ -429,7 +359,7 @@ export default function LibraryDrawer() {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
                           }}>
-                            {item.title}
+                            {item.title || item.name}
                           </div>
                           <div style={{
                             fontSize: '11px',
@@ -445,32 +375,34 @@ export default function LibraryDrawer() {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         {item.source === 'spotify' ? <SpotifyIcon size={14} /> : <YouTubeIcon size={14} />}
+                        
                         <button
-                          onClick={() => playTrack({ ...item, name: item.title, track_id: item.id })}
+                          onClick={() => handlePlayToggle(item)}
                           style={{
-                            width: '28px',
-                            height: '28px',
+                            width: '30px',
+                            height: '30px',
                             borderRadius: '8px',
-                            background: '#272727',
+                            background: isCurrentPlaying ? '#10b981' : '#272727',
                             border: '1px solid #313131',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             cursor: 'pointer',
-                            color: isCurrent && isPlaying ? '#10b981' : '#FFFFFF',
+                            color: isCurrentPlaying ? '#FFFFFF' : '#FFFFFF',
                             transition: 'all 0.2s var(--ease-fluid)'
                           }}
-                          title="Play Track"
+                          title={isCurrentPlaying ? "Pause Preview" : "Play Preview"}
                         >
-                          <Play size={12} fill={isCurrent && isPlaying ? '#10b981' : 'none'} />
+                          {isCurrentPlaying ? <Pause size={12} fill="#FFFFFF" /> : <Play size={12} fill="#FFFFFF" />}
                         </button>
+
                         <a
                           href={getPlayUrl(item)}
                           target="_blank"
                           rel="noreferrer"
                           style={{
-                            width: '28px',
-                            height: '28px',
+                            width: '30px',
+                            height: '30px',
                             borderRadius: '8px',
                             background: '#272727',
                             border: '1px solid #313131',
@@ -480,7 +412,7 @@ export default function LibraryDrawer() {
                             color: '#9B9B9B',
                             textDecoration: 'none'
                           }}
-                          title="Open Stream"
+                          title="Open on Streaming App"
                         >
                           <ExternalLink size={12} />
                         </a>
@@ -493,12 +425,12 @@ export default function LibraryDrawer() {
           </div>
         )}
 
-        {/* TAB 2: TOP ARTISTS FROM INGESTION */}
+        {/* TAB 2: TOP ARTISTS */}
         {activeTab === 'artists' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {top_artists.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 16px', color: '#9B9B9B' }}>
-                No artists found in database.
+                No artists found in library.
               </div>
             ) : (
               top_artists.map((artist, idx) => (
@@ -538,12 +470,12 @@ export default function LibraryDrawer() {
                       </div>
                       <div style={{
                         fontSize: '11px',
-                        color: '#06b6d4',
+                        color: '#a855f7',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
                       }}>
-                        {(artist.genres || []).slice(0, 2).join(' · ') || 'Artist'}
+                        {(artist.genres || []).slice(0, 2).join(' · ') || 'Top Artist'}
                       </div>
                     </div>
                   </div>
@@ -558,8 +490,15 @@ export default function LibraryDrawer() {
                     }}>
                       {artist.total_plays || artist.track_count || 1} plays
                     </span>
-                    <span style={{ fontSize: '10px', color: '#9B9B9B' }}>
-                      Graph Centrality: {Math.round((artist.pagerank || 0.15) * 100)}%
+                    <span style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: '#272727',
+                      color: '#9B9B9B',
+                      marginTop: '4px'
+                    }}>
+                      Top Artist
                     </span>
                   </div>
                 </div>
@@ -568,9 +507,9 @@ export default function LibraryDrawer() {
           </div>
         )}
 
-        {/* TAB 3: TOP PLAYLISTS */}
+        {/* TAB 3: PLAYLISTS */}
         {activeTab === 'playlists' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {top_playlists.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 16px', color: '#9B9B9B' }}>
                 No synced playlists found.
@@ -618,7 +557,7 @@ export default function LibraryDrawer() {
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '4px' }}>
                     <span style={{ fontSize: '11px', color: '#666666' }}>
-                      Topology cluster verified
+                      Synced Playlist
                     </span>
                     <button
                       onClick={() => fetchLibrary({ source: pl.source })}
@@ -643,7 +582,7 @@ export default function LibraryDrawer() {
           </div>
         )}
 
-        {/* TAB 4: INGESTED TRACKS WITH ADVANCED MULTI-FILTER BAR */}
+        {/* TAB 4: SONGS (LIBRARY) */}
         {activeTab === 'tracks' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Search Input */}
@@ -671,7 +610,7 @@ export default function LibraryDrawer() {
             {/* Filter Bar 1: Mood Filter */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>
-                Mood / Acoustic Valence
+                Mood / Vibe
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {[
@@ -706,13 +645,13 @@ export default function LibraryDrawer() {
             {/* Filter Bar 2: Sort Strategy */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ fontSize: '11px', fontWeight: '600', color: '#9B9B9B' }}>
-                Sort Strategy
+                Sort By
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {[
                   { id: 'highest_plays', label: 'Highest Plays' },
-                  { id: 'past_plays', label: 'Past Plays' },
-                  { id: 'most_loved', label: 'Most Loved' }
+                  { id: 'past_plays', label: 'Recently Played' },
+                  { id: 'most_loved', label: 'Favorites' }
                 ].map(s => (
                   <button
                     key={s.id}
@@ -721,7 +660,7 @@ export default function LibraryDrawer() {
                       padding: '4px 10px',
                       borderRadius: '8px',
                       border: '1px solid',
-                      borderColor: selectedSort === s.id ? '#06b6d4' : '#272727',
+                      borderColor: selectedSort === s.id ? '#FFFFFF' : '#272727',
                       background: selectedSort === s.id ? '#272727' : 'transparent',
                       color: selectedSort === s.id ? '#FFFFFF' : '#9B9B9B',
                       fontSize: '11px',
@@ -779,12 +718,14 @@ export default function LibraryDrawer() {
                 </div>
               ) : (
                 (library.all || []).map((tr, idx) => {
-                  const isCurrent = (currentTrack?.track_id || currentTrack?.id) === tr.id;
+                  const trId = tr.id || tr.track_id;
+                  const isCurrent = (currentTrack?.track_id || currentTrack?.id) === trId;
+                  const isCurrentPlaying = isCurrent && isPlaying;
                   return (
                     <div
                       key={idx}
                       style={{
-                        padding: '10px 14px',
+                        padding: '10px 12px',
                         background: isCurrent ? '#272727' : '#1F1F1F',
                         border: '1px solid',
                         borderColor: isCurrent ? '#a855f7' : '#272727',
@@ -796,25 +737,32 @@ export default function LibraryDrawer() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        <button
-                          onClick={() => playTrack({ ...tr, name: tr.title, track_id: tr.id })}
-                          style={{
-                            width: '28px',
-                            height: '28px',
+                        {tr.cover_url ? (
+                          <img
+                            src={tr.cover_url}
+                            alt=""
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '8px',
+                              objectFit: 'cover',
+                              flexShrink: 0
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
                             borderRadius: '8px',
                             background: '#272727',
-                            border: '1px solid #313131',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: isCurrent && isPlaying ? '#10b981' : '#FFFFFF',
                             flexShrink: 0
-                          }}
-                          title="Play Track"
-                        >
-                          <Play size={12} fill={isCurrent && isPlaying ? '#10b981' : 'none'} />
-                        </button>
+                          }}>
+                            <Music size={16} color="#9B9B9B" />
+                          </div>
+                        )}
 
                         <div style={{ minWidth: 0 }}>
                           <div style={{
@@ -848,7 +796,29 @@ export default function LibraryDrawer() {
                         }}>
                           {tr.play_count || 1}p
                         </span>
+                        
                         {tr.source === 'spotify' ? <SpotifyIcon size={14} /> : <YouTubeIcon size={14} />}
+                        
+                        <button
+                          onClick={() => handlePlayToggle(tr)}
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '8px',
+                            background: isCurrentPlaying ? '#10b981' : '#272727',
+                            border: '1px solid #313131',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: isCurrentPlaying ? '#FFFFFF' : '#FFFFFF',
+                            flexShrink: 0
+                          }}
+                          title={isCurrentPlaying ? "Pause Preview" : "Play Preview"}
+                        >
+                          {isCurrentPlaying ? <Pause size={12} fill="#FFFFFF" /> : <Play size={12} fill="#FFFFFF" />}
+                        </button>
+
                         <a
                           href={getPlayUrl(tr)}
                           target="_blank"
@@ -859,6 +829,7 @@ export default function LibraryDrawer() {
                             alignItems: 'center',
                             textDecoration: 'none'
                           }}
+                          title="Open on Streaming App"
                         >
                           <ExternalLink size={12} />
                         </a>

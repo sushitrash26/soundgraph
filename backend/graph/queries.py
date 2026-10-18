@@ -194,6 +194,7 @@ class GraphQueries:
                genres,
                coalesce(t.source, 'spotify') AS source,
                coalesce(t.cover_url, '') AS cover_url,
+               coalesce(t.preview_url, '') AS preview_url,
                coalesce(t.popularity, 50) AS popularity,
                t.energy AS energy,
                t.valence AS valence,
@@ -365,7 +366,8 @@ class GraphQueries:
             t.danceability AS danceability,
             coalesce(l.play_count, 1) AS play_count,
             feedback_reward,
-            coalesce(t.cover_url, '') AS cover_url
+            coalesce(t.cover_url, '') AS cover_url,
+            coalesce(t.preview_url, '') AS preview_url
         ORDER BY {order_by}
         LIMIT $limit
         """
@@ -477,14 +479,15 @@ class GraphQueries:
                     genres,
                     rec.source AS source,
                     coalesce(rec.cover_url, '') AS cover_url,
+                    coalesce(rec.preview_url, '') AS preview_url,
                     final_score AS score,
                     coalesce(rec.popularity, 50) AS popularity,
                     rec.energy AS energy,
                     rec.valence AS valence,
                     rec.danceability AS danceability,
                     case
-                      when anchor_track is not null then 'Matches your ' + $personaLabel + ' persona bridging ' + anchor_track
-                      else 'Curated for your ' + $personaLabel + ' via 768-D latent space'
+                      when anchor_track is not null then 'Matches your vibe with ' + anchor_track
+                      else 'Matches your streaming taste'
                     end AS reason
                 ORDER BY final_score DESC, popularity DESC
                 LIMIT 12
@@ -538,12 +541,14 @@ class GraphQueries:
                 artists,
                 genres,
                 rec.source AS source,
+                coalesce(rec.cover_url, '') AS cover_url,
+                coalesce(rec.preview_url, '') AS preview_url,
                 0.78 AS score,
                 coalesce(rec.popularity, 50) AS popularity,
                 rec.energy AS energy,
                 rec.valence AS valence,
                 rec.danceability AS danceability,
-                '✨ LinUCB Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
+                'Matches your affinity for ' + coalesce(head(genres), 'fresh sounds') AS reason
             ORDER BY popularity DESC
             LIMIT $remLimit
             """
@@ -592,12 +597,14 @@ class GraphQueries:
                 artists,
                 genres,
                 rec.source AS source,
+                coalesce(rec.cover_url, '') AS cover_url,
+                coalesce(rec.preview_url, '') AS preview_url,
                 final_score AS score,
                 coalesce(rec.popularity, 50) AS popularity,
                 rec.energy AS energy,
                 rec.valence AS valence,
                 rec.danceability AS danceability,
-                'Discovered through your ' + coalesce(seed_source, 'music') + ' taste in ' + coalesce(seed_track, 'top artists') AS reason
+                'Matches your taste in ' + coalesce(seed_track, 'top artists') AS reason
             ORDER BY final_score DESC, popularity DESC
             LIMIT $remLimit
             """
@@ -635,12 +642,14 @@ class GraphQueries:
                 artists,
                 genres,
                 rec.source AS source,
+                coalesce(rec.cover_url, '') AS cover_url,
+                coalesce(rec.preview_url, '') AS preview_url,
                 0.85 AS score,
                 coalesce(rec.popularity, 50) AS popularity,
                 rec.energy AS energy,
                 rec.valence AS valence,
                 rec.danceability AS danceability,
-                'Catalog selection matching your sonic parameters' AS reason
+                'Curated based on your listening style' AS reason
             ORDER BY popularity DESC
             LIMIT $remLimit
             """
@@ -1059,12 +1068,12 @@ class GraphQueries:
                     "similarity_score": round(item.get("similarity_score", 0.85), 2),
                     "shared_artists": item.get("shared_artists", []),
                     "shared_genres": item.get("shared_genres", []),
-                    "explanation": f"Connected to your listen of '{item.get('source_track')}'{genre_note} via graph topology."
+                    "explanation": f"Matches your listening taste in '{item.get('source_track')}'{genre_note}."
                 }
         except Exception as e:
             logger.warning(f"Graph explanation check warning: {e}")
 
-        # Step 2: Fallback to 768-D Nearest Neighbor Vector Proximity in latent space
+        # Step 2: Fallback to Nearest Neighbor Vector Proximity in latent space
         vector_explain_query = """
         MATCH (target:Track {id: $track_id})
         MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(seed:Track)
@@ -1093,7 +1102,7 @@ class GraphQueries:
                     "similarity_score": v_item.get("cos_sim", 0.82),
                     "shared_artists": [v_item.get("seed_artist")] if v_item.get("seed_artist") else [],
                     "shared_genres": v_item.get("seed_genres", []),
-                    "explanation": f"Acoustically bridged in 768-D latent space ({sim_pct}% vector alignment) to your listen of '{v_item.get('source_track')}'{artist_ref}."
+                    "explanation": f"Matches your taste in '{v_item.get('source_track')}'{artist_ref} ({sim_pct}% match)."
                 }
         except Exception as e:
             logger.error(f"Vector explain query error: {e}")

@@ -68,17 +68,23 @@ export default function AudioPlayerBar() {
     setProgress(0);
 
     if (currentTrack) {
-      const rawId = currentTrack.track_id || currentTrack.id || '';
-      const isYt = currentTrack.source === 'youtube' || rawId.includes('youtube:video:');
-
-      if (isYt) {
-        const vidId = rawId.replace('youtube:video:', '');
-        initOrPlayYouTube(vidId);
-      } else if (currentTrack.preview_url) {
+      if (currentTrack.preview_url) {
         if (audioRef.current) {
           audioRef.current.src = currentTrack.preview_url;
           audioRef.current.volume = isMuted ? 0 : volume;
-          audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+          audioRef.current.play()
+            .then(() => setIsPlaying(true))
+            .catch((err) => {
+              console.warn('Audio preview play prevented or failed:', err);
+              setIsPlaying(false);
+            });
+        }
+      } else {
+        const rawId = currentTrack.track_id || currentTrack.id || '';
+        const isYt = currentTrack.source === 'youtube' || rawId.includes('youtube:video:');
+        if (isYt) {
+          const vidId = rawId.replace('youtube:video:', '');
+          initOrPlayYouTube(vidId);
         }
       }
     }
@@ -103,20 +109,21 @@ export default function AudioPlayerBar() {
   // Handle Play/Pause
   useEffect(() => {
     if (!currentTrack) return;
-    const rawId = currentTrack.track_id || currentTrack.id || '';
-    const isYt = currentTrack.source === 'youtube' || rawId.includes('youtube:video:');
-
-    if (isYt && ytPlayerRef.current && ytPlayerRef.current.playVideo) {
-      if (isPlaying) {
-        ytPlayerRef.current.playVideo();
-      } else {
-        ytPlayerRef.current.pauseVideo();
-      }
-    } else if (audioRef.current) {
+    if (currentTrack.preview_url && audioRef.current) {
       if (isPlaying) {
         audioRef.current.play().catch(() => {});
       } else {
         audioRef.current.pause();
+      }
+    } else {
+      const rawId = currentTrack.track_id || currentTrack.id || '';
+      const isYt = currentTrack.source === 'youtube' || rawId.includes('youtube:video:');
+      if (isYt && ytPlayerRef.current && ytPlayerRef.current.playVideo) {
+        if (isPlaying) {
+          ytPlayerRef.current.playVideo();
+        } else {
+          ytPlayerRef.current.pauseVideo();
+        }
       }
     }
   }, [isPlaying]);
