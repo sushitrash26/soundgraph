@@ -5,6 +5,10 @@ import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
 import AudioPlayerBar from './components/AudioPlayerBar';
 import AcousticLensModal from './components/AcousticLensModal';
+import OmniSearchBar from './components/OmniSearchBar';
+import CreateDeckModal from './components/CreateDeckModal';
+import AddToDeckModal from './components/AddToDeckModal';
+import AIAnswerModal from './components/AIAnswerModal';
 import { Music, Network, LayoutDashboard, Sparkles, Radio, Disc3, LogOut, CheckCircle2, Music2 } from 'lucide-react';
 import axios from 'axios';
 
@@ -78,6 +82,13 @@ export default function App() {
           if (data.type === 'frontier_candidates_ready' && data.candidates) {
             appendFrontierCandidates(data.candidates);
             setNotification(data.message || '✨ New frontier tracks synthesized into your deck!');
+          }
+          if (data.type === 'ingestion_complete' || data.type === 'gds_complete') {
+            refreshDashboard();
+            setNotification(data.message || 'Taste graph updated with your latest music!');
+          }
+          if (data.type === 'ingestion_progress' || data.type === 'gds_progress') {
+            setNotification(data.status || 'Updating music graph...');
           }
           addLiveEvent({
             time: new Date().toLocaleTimeString(),
@@ -158,31 +169,39 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center Connection Status Pills (Commercial requirement) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Center: Google-Style Omni Search Bar with Integrated Ask AI */}
+          <div style={{ flex: 1, maxWidth: '560px', margin: '0 20px' }}>
+            <OmniSearchBar />
+          </div>
+
+          {/* Right Controls: Connections + Acoustic Lens + User Profile */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
             {/* Spotify Connection State */}
             {authStatus?.spotify_connected ? (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 14px',
-                borderRadius: '999px',
-                background: 'rgba(29, 185, 84, 0.12)',
-                border: '1px solid rgba(29, 185, 84, 0.35)',
-                color: '#4ade80',
-                fontSize: '12px',
-                fontWeight: '600'
-              }}>
+              <div 
+                title="Spotify Connected"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '999px',
+                  background: 'rgba(29, 185, 84, 0.12)',
+                  border: '1px solid rgba(29, 185, 84, 0.35)',
+                  color: '#4ade80',
+                  fontSize: '11px',
+                  fontWeight: '600'
+                }}
+              >
                 <span style={{
-                  width: '7px',
-                  height: '7px',
+                  width: '6px',
+                  height: '6px',
                   borderRadius: '50%',
                   background: '#22c55e',
-                  boxShadow: '0 0 10px #22c55e'
+                  boxShadow: '0 0 8px #22c55e'
                 }} />
-                <Music2 size={13} />
-                <span>Spotify Connected</span>
+                <Music2 size={12} />
+                <span className="hidden md:inline">Spotify</span>
               </div>
             ) : (
               <button
@@ -190,54 +209,49 @@ export default function App() {
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
+                  gap: '5px',
+                  padding: '6px 12px',
                   borderRadius: '999px',
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   color: '#e2e8f0',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  cursor: 'pointer'
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(29, 185, 84, 0.5)';
-                  e.currentTarget.style.color = '#4ade80';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                  e.currentTarget.style.color = '#e2e8f0';
-                }}
+                title="Connect Spotify Account"
               >
-                <Music2 size={13} />
-                <span>+ Connect Spotify</span>
+                <Music2 size={12} />
+                <span className="hidden md:inline">+ Spotify</span>
               </button>
             )}
 
             {/* YouTube Connection State */}
             {authStatus?.google_connected ? (
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 14px',
-                borderRadius: '999px',
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                color: '#f87171',
-                fontSize: '12px',
-                fontWeight: '600'
-              }}>
+              <div 
+                title="YouTube Music Connected"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '999px',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  color: '#f87171',
+                  fontSize: '11px',
+                  fontWeight: '600'
+                }}
+              >
                 <span style={{
-                  width: '7px',
-                  height: '7px',
+                  width: '6px',
+                  height: '6px',
                   borderRadius: '50%',
                   background: '#ef4444',
-                  boxShadow: '0 0 10px #ef4444'
+                  boxShadow: '0 0 8px #ef4444'
                 }} />
-                <YouTubeIcon size={13} />
-                <span>YouTube Connected</span>
+                <YouTubeIcon size={12} />
+                <span className="hidden md:inline">YouTube</span>
               </div>
             ) : (
               <button
@@ -245,28 +259,20 @@ export default function App() {
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
+                  gap: '5px',
+                  padding: '6px 12px',
                   borderRadius: '999px',
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                   color: '#e2e8f0',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  cursor: 'pointer'
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
-                  e.currentTarget.style.color = '#f87171';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                  e.currentTarget.style.color = '#e2e8f0';
-                }}
+                title="Connect YouTube Music Account"
               >
-                <YouTubeIcon size={13} />
-                <span>+ Connect YouTube</span>
+                <YouTubeIcon size={12} />
+                <span className="hidden md:inline">+ YouTube</span>
               </button>
             )}
           </div>
@@ -462,6 +468,11 @@ export default function App() {
         isOpen={isAcousticLensOpen} 
         onClose={() => setIsAcousticLensOpen(false)} 
       />
+
+      {/* User Decks & AI Modals */}
+      <CreateDeckModal />
+      <AddToDeckModal />
+      <AIAnswerModal />
     </div>
   );
 }

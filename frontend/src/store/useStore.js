@@ -47,6 +47,15 @@ export const useStore = create((set, get) => ({
   swipedIds: new Set(),
   isDeckLoadingMore: false,
   recommendations: [],
+  userDecks: [],
+  activeDeckId: 'for_you',
+  activeDeckTitle: 'For You',
+  isDeckModalOpen: false,
+  isAddToDeckOpen: false,
+  trackToAddToDeck: null,
+  aiAnswer: null,
+  isOmniSearching: false,
+  searchBanner: null,
   library: { total: 0, all: [], spotify: [], youtube: [] },
   topArtists: [],
   graphData: { nodes: [], links: [] },
@@ -412,6 +421,197 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  setIsDeckModalOpen: (open) => set({ isDeckModalOpen: open }),
+  setIsAddToDeckOpen: (open, track = null) => set({ isAddToDeckOpen: open, trackToAddToDeck: track }),
+  setAiAnswer: (ans) => set({ aiAnswer: ans }),
+  clearSearchBanner: () => set({ searchBanner: null }),
+
+  fetchUserDecks: async () => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.get(`${API_BASE}/decks?user_id=${encodeURIComponent(uid)}`);
+      set({ userDecks: res.data || [] });
+    } catch (e) {
+      console.warn('Failed to fetch user decks:', e);
+    }
+  },
+
+  createDeck: async (name, mood = 'general', trackIds = []) => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.post(`${API_BASE}/decks`, {
+        user_id: uid,
+        name,
+        mood,
+        track_ids: trackIds
+      });
+      await get().fetchUserDecks();
+      return res.data;
+    } catch (e) {
+      console.error('Failed to create deck:', e);
+      throw e;
+    }
+  },
+
+  deleteDeck: async (deckId) => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      await axios.delete(`${API_BASE}/decks/${deckId}?user_id=${encodeURIComponent(uid)}`);
+      if (get().activeDeckId === deckId) {
+        get().selectDeck('for_you', 'For You');
+      }
+      await get().fetchUserDecks();
+    } catch (e) {
+      console.error('Failed to delete deck:', e);
+    }
+  },
+
+  addTrackToDeck: async (deckId, trackId) => {
+    try {
+      await axios.post(`${API_BASE}/decks/${deckId}/tracks`, { track_id: trackId });
+      await get().fetchUserDecks();
+      set({ isAddToDeckOpen: false, trackToAddToDeck: null, statusMessage: '✨ Track added to your deck!' });
+    } catch (e) {
+      console.error('Failed to add track to deck:', e);
+    }
+  },
+
+  removeTrackFromDeck: async (deckId, trackId) => {
+    try {
+      await axios.delete(`${API_BASE}/decks/${deckId}/tracks/${encodeURIComponent(trackId)}`);
+      if (get().activeDeckId === deckId) {
+        set((state) => ({
+          recommendations: state.recommendations.filter(t => (t.track_id || t.id) !== trackId)
+        }));
+      }
+      await get().fetchUserDecks();
+    } catch (e) {
+      console.error('Failed to remove track from deck:', e);
+    }
+  },
+
+  selectDeck: async (deckId, deckTitle) => {
+    if (deckId === 'for_you') {
+      set({ activeDeckId: 'for_you', activeDeckTitle: 'For You', searchBanner: null });
+      await get().fetchRecommendations(true);
+      return;
+    }
+    try {
+      set({ isLoading: true, statusMessage: `Loading deck "${deckTitle}"...` });
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.get(`${API_BASE}/decks/${deckId}?user_id=${encodeURIComponent(uid)}`);
+      if (res.data && res.data.cards) {
+        set({
+          recommendations: res.data.cards,
+          activeDeckId: deckId,
+          activeDeckTitle: res.data.deck_title || deckTitle,
+          searchBanner: null,
+          isLoading: false
+        });
+      }
+    } catch (e) {
+      console.error('Failed to load deck:', e);
+      set({ isLoading: false });
+    }
+  },
+
+  searchAndBridge: async (query) => {
+    if (!query || !query.trim()) return;
+    set({ isOmniSearching: true, statusMessage: `Searching & bridging taste for "${query}"...` });
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.get(`${API_BASE}/search/bridge?q=${encodeURIComponent(query)}&user_id=${encodeURIComponent(uid)}&limit=10`);
+      if (res.data && res.data.cards && res.data.cards.length > 0) {
+        set({
+          recommendations: res.data.cards,
+          activeDeckId: res.data.deck_id || `search_${Date.now()}`,
+          activeDeckTitle: res.data.deck_title || `Search: ${query}`,
+          searchBanner: {
+            title: res.data.deck_title || `Search: ${query}`,
+            explanation: res.data.explanation
+          },
+          isOmniSearching: false,
+          activeTab: 'dashboard'
+        });
+      } else {
+        set({ isOmniSearching: false, statusMessage: `No results found for "${query}"` });
+      }
+    } catch (e) {
+      console.error('Search and bridge error:', e);
+      set({ isOmniSearching: false });
+    }
+  },
+
+  executeAskAI: async (prompt) => {
+    if (!prompt || !prompt.trim()) return;
+    set({ isOmniSearching: true, statusMessage: 'Consulting AI Music Brain...' });
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.post(`${API_BASE}/chat`, {
+        user_id: uid,
+        prompt: prompt
+      });
+      const data = res.data || {};
+      if (data.type === 'library_answer') {
+        set({
+          aiAnswer: {
+            type: 'library_answer',
+            message: data.message,
+            stats: data.stats
+          },
+          isOmniSearching: false
+        });
+      } else if (data.cards && data.cards.length > 0) {
+        set({
+          recommendations: data.cards,
+          activeDeckId: data.deck_id || `ai_${Date.now()}`,
+          activeDeckTitle: data.deck_title || 'AI Curated Deck',
+          searchBanner: {
+            title: data.deck_title || 'AI Curated Deck',
+            explanation: data.message
+          },
+          aiAnswer: {
+            type: data.type || 'vibe_deck',
+            message: data.message,
+            canSave: true
+          },
+          isOmniSearching: false,
+          activeTab: 'dashboard'
+        });
+      } else {
+        set({
+          aiAnswer: {
+            type: 'message',
+            message: data.message || 'I processed your request but found no direct tracks.'
+          },
+          isOmniSearching: false
+        });
+      }
+    } catch (e) {
+      console.error('Ask AI error:', e);
+      set({ isOmniSearching: false });
+    }
+  },
+
+  saveCurrentCardsAsDeck: async (deckName, mood = 'custom') => {
+    const { recommendations, createDeck } = get();
+    if (!recommendations || recommendations.length === 0) return;
+    const trackIds = recommendations.map(c => c.track_id || c.id).filter(Boolean);
+    const newDeck = await createDeck(deckName || 'My Saved Deck', mood, trackIds);
+    set({
+      activeDeckId: newDeck.id,
+      activeDeckTitle: newDeck.name,
+      searchBanner: null,
+      statusMessage: `✨ Deck "${newDeck.name}" saved successfully!`
+    });
+  },
+
   refreshDashboard: async () => {
     await get().fetchStats();
     await get().fetchTasteProfile();
@@ -420,6 +620,7 @@ export const useStore = create((set, get) => ({
     await get().fetchTopArtists();
     await get().fetchGraphData();
     await get().fetchDynamicSuggestions();
+    await get().fetchUserDecks();
   },
 
   fetchStats: async () => {

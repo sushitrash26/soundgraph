@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import CardDeck3D from '../components/CardDeck3D';
+import DeckSwitcherRibbon from '../components/DeckSwitcherRibbon';
 import LibraryDrawer from '../components/LibraryDrawer';
 import MoodChatModal from '../components/MoodChatModal';
 import { Sparkles, RefreshCw, MessageSquare, Compass, Radio } from 'lucide-react';
@@ -161,6 +162,7 @@ export default function Dashboard() {
             border: '1px solid #272727',
             boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
           }}>
+            <DeckSwitcherRibbon />
             <CardDeck3D />
           </div>
 

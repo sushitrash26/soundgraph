@@ -1,6 +1,9 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from typing import List, Dict, Any, Optional
+import urllib.parse
+import urllib.request
+import json
 from backend.core.config import settings
 from backend.core.logger import logger
 from backend.ingestors.base import BaseIngestor
@@ -51,8 +54,8 @@ class SpotifyIngestor(BaseIngestor):
 
         tracks_dict: Dict[str, Dict[str, Any]] = {}
 
-        # 1. Top Tracks (short_term, medium_term)
-        for time_range in ["short_term", "medium_term"]:
+        # 1. Top Tracks across all 3 time horizons (short_term, medium_term, long_term)
+        for time_range in ["short_term", "medium_term", "long_term"]:
             try:
                 top = self.sp.current_user_top_tracks(limit=50, time_range=time_range)
                 for item in top.get("items", []):
@@ -76,26 +79,35 @@ class SpotifyIngestor(BaseIngestor):
         except Exception as e:
             logger.warning(f"Error fetching recently played: {e}")
 
-        # 3. Saved / Liked Tracks
-        try:
-            saved = self.sp.current_user_saved_tracks(limit=50)
-            for item in saved.get("items", []):
-                tr = item.get("track")
-                if tr:
-                    tid = f"spotify:track:{tr['id']}"
-                    if tid not in tracks_dict:
-                        tracks_dict[tid] = self._normalize_track(tr)
-                    tracks_dict[tid]["play_count"] += 1
-        except Exception as e:
-            logger.warning(f"Error fetching saved tracks: {e}")
+        # 3. Saved / Liked Tracks with pagination (up to 200 items)
+        offset = 0
+        while offset < 200:
+            try:
+                saved = self.sp.current_user_saved_tracks(limit=50, offset=offset)
+                items = saved.get("items", [])
+                if not items:
+                    break
+                for item in items:
+                    tr = item.get("track")
+                    if tr and tr.get("id"):
+                        tid = f"spotify:track:{tr['id']}"
+                        if tid not in tracks_dict:
+                            tracks_dict[tid] = self._normalize_track(tr)
+                        tracks_dict[tid]["play_count"] += 1
+                offset += len(items)
+                if len(items) < 50:
+                    break
+            except Exception as e:
+                logger.warning(f"Error fetching saved tracks (offset {offset}): {e}")
+                break
 
         # 4. User Playlists and Playlist Items
         try:
-            playlists = self.sp.current_user_playlists(limit=20)
+            playlists = self.sp.current_user_playlists(limit=25)
             for pl in (playlists.get("items", []) or []):
                 pl_id = pl.get("id")
                 if pl_id:
-                    pl_items = self.sp.playlist_items(pl_id, limit=35)
+                    pl_items = self.sp.playlist_items(pl_id, limit=50)
                     for p_item in (pl_items.get("items", []) or []):
                         tr = p_item.get("track")
                         if tr and tr.get("id"):
@@ -127,19 +139,43 @@ class SpotifyIngestor(BaseIngestor):
             except Exception as e:
                 logger.warning(f"Error fetching audio features chunk: {e}")
 
+        # 6. Fallback Preview URL Enrichment if missing
+        for tid, tr in tracks_dict.items():
+            if not tr.get("preview_url") or not tr.get("cover_url"):
+                try:
+                    q = urllib.parse.quote(f"{tr['name']} {tr['artists'][0] if tr['artists'] else ''}".strip())
+                    url = f"https://itunes.apple.com/search?term={q}&entity=song&limit=1"
+                    req = urllib.request.Request(url, headers={"User-Agent": "SoundGraph/1.0"})
+                    with urllib.request.urlopen(req, timeout=1.5) as resp:
+                        d = json.loads(resp.read().decode())
+                        if d.get("resultCount", 0) > 0:
+                            item = d["results"][0]
+                            if not tr.get("preview_url"):
+                                tr["preview_url"] = item.get("previewUrl", "")
+                            if not tr.get("cover_url"):
+                                tr["cover_url"] = item.get("artworkUrl100", "").replace("100x100bb", "600x600bb")
+                except Exception:
+                    pass
+
         logger.info(f"Spotify ingestion fetched {len(tracks_dict)} unique tracks with features.")
         return list(tracks_dict.values())
 
     def _normalize_track(self, item: Dict[str, Any]) -> Dict[str, Any]:
         artists = [a["name"] for a in item.get("artists", []) if a.get("name")]
-        album_name = item.get("album", {}).get("name") if item.get("album") else ""
+        album_obj = item.get("album") or {}
+        album_name = album_obj.get("name") if album_obj else ""
+        images = album_obj.get("images") or []
+        cover_url = images[0].get("url") if images else ""
+        preview_url = item.get("preview_url") or ""
         return {
             "id": f"spotify:track:{item['id']}",
             "name": item.get("name", "Unknown Track"),
             "artists": artists,
             "album": album_name,
-            "genres": [],  # Will be populated or linked via artist
+            "genres": [],
             "source": "spotify",
+            "cover_url": cover_url,
+            "preview_url": preview_url,
             "uri": item.get("uri"),
             "duration_ms": item.get("duration_ms", 0),
             "popularity": item.get("popularity", 50),

@@ -1,5 +1,6 @@
 import httpx
 import re
+import urllib.parse
 from typing import List, Dict, Any, Optional
 from backend.core.config import settings
 from backend.core.logger import logger
@@ -71,126 +72,116 @@ class GoogleYouTubeIngestor(BaseIngestor):
                 "avatar_url": data.get("picture", "")
             }
 
-    async def fetch_listening_data(self) -> List[Dict[str, Any]]:
+    async def fetch_listening_data(self, max_pages_lm: int = 8) -> List[Dict[str, Any]]:
         """
-        STRICT Music Ingestion:
-        Filters specifically for categoryId == 10 (Music) or topicCategories containing Music.
-        Discards random YouTube videos, shorts, lectures, and non-music content.
+        Comprehensive Multi-Page YouTube Music Ingestion:
+        1. Directly targets YouTube Music's dedicated Liked Music playlist ('LM') with pagination.
+        2. Ingests user created playlists and custom collections with pagination.
+        3. Enriches tracks with official 600x600 album artwork and 30s AAC preview streams.
+        4. Derives acoustic embeddings and canonical genre tags.
         """
         if not self.access_token:
             raise ValueError("Access token required")
 
         tracks: Dict[str, Dict[str, Any]] = {}
         headers = {"Authorization": f"Bearer {self.access_token}"}
+        raw_items: List[Dict[str, Any]] = []
 
-        candidate_video_ids = []
-
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # 1. Fetch Liked Videos Playlist Items
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            # 1. Fetch from YouTube Music's dedicated Liked Music playlist (ID: 'LM')
             try:
-                ch_res = await client.get(
-                    f"{YOUTUBE_API_BASE}/channels",
-                    params={"part": "contentDetails,snippet", "mine": "true"},
-                    headers=headers
-                )
-                if ch_res.status_code == 200:
-                    items = ch_res.json().get("items", [])
-                    if items:
-                        related = items[0].get("contentDetails", {}).get("relatedPlaylists", {})
-                        likes_playlist_id = related.get("likes")
-                        if likes_playlist_id:
-                            likes_res = await client.get(
-                                f"{YOUTUBE_API_BASE}/playlistItems",
-                                params={"part": "snippet", "playlistId": likes_playlist_id, "maxResults": 50},
-                                headers=headers
-                            )
-                            if likes_res.status_code == 200:
-                                for item in likes_res.json().get("items", []):
-                                    vid = item.get("snippet", {}).get("resourceId", {}).get("videoId")
-                                    if vid:
-                                        candidate_video_ids.append(vid)
+                page_token = None
+                for page_num in range(max_pages_lm):
+                    params = {"part": "snippet", "playlistId": "LM", "maxResults": 50}
+                    if page_token:
+                        params["pageToken"] = page_token
+                    res = await client.get(f"{YOUTUBE_API_BASE}/playlistItems", params=params, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        page_items = data.get("items", [])
+                        raw_items.extend(page_items)
+                        page_token = data.get("nextPageToken")
+                        if not page_token:
+                            break
+                    else:
+                        logger.warning(f"YouTube Music LM fetch status {res.status_code}: {res.text[:120]}")
+                        break
+                logger.info(f"Retrieved {len(raw_items)} items from YouTube Music Liked Music (LM)")
             except Exception as e:
-                logger.warning(f"Error fetching YouTube liked playlist: {e}")
+                logger.warning(f"Error fetching YouTube Music LM playlist: {e}")
 
-            # 2. Fetch User's YouTube Music Playlists
+            # 2. Fetch User's Custom Playlists (e.g. 'Fav.', etc.)
             try:
                 pl_res = await client.get(
                     f"{YOUTUBE_API_BASE}/playlists",
-                    params={"part": "snippet", "mine": "true", "maxResults": 25},
+                    params={"part": "snippet,contentDetails", "mine": "true", "maxResults": 25},
                     headers=headers
                 )
                 if pl_res.status_code == 200:
                     for pl in pl_res.json().get("items", []):
-                        pl_id = pl["id"]
-                        items_res = await client.get(
-                            f"{YOUTUBE_API_BASE}/playlistItems",
-                            params={"part": "snippet", "playlistId": pl_id, "maxResults": 30},
-                            headers=headers
-                        )
-                        if items_res.status_code == 200:
-                            for item in items_res.json().get("items", []):
-                                vid = item.get("snippet", {}).get("resourceId", {}).get("videoId")
-                                if vid:
-                                    candidate_video_ids.append(vid)
+                        pl_id = pl.get("id")
+                        pl_title = pl.get("snippet", {}).get("title", "")
+                        # Skip academic or non-music playlists
+                        if any(term in pl_title.lower() for term in ["physics", "math", "python", "optics", "waves", "pnc", "line"]):
+                            continue
+
+                        pl_page_token = None
+                        for _ in range(3):  # up to 150 items per playlist
+                            p_params = {"part": "snippet", "playlistId": pl_id, "maxResults": 50}
+                            if pl_page_token:
+                                p_params["pageToken"] = pl_page_token
+                            items_res = await client.get(f"{YOUTUBE_API_BASE}/playlistItems", params=p_params, headers=headers)
+                            if items_res.status_code == 200:
+                                p_data = items_res.json()
+                                raw_items.extend(p_data.get("items", []))
+                                pl_page_token = p_data.get("nextPageToken")
+                                if not pl_page_token:
+                                    break
+                            else:
+                                break
             except Exception as e:
                 logger.warning(f"Error fetching YouTube user playlists: {e}")
 
-            # 3. BATCH VALIDATE: Strictly verify categoryId == 10 (Music) or topicCategories has Music
-            unique_ids = list(dict.fromkeys(candidate_video_ids))
-            for i in range(0, len(unique_ids), 50):
-                chunk = unique_ids[i:i+50]
-                try:
-                    v_res = await client.get(
-                        f"{YOUTUBE_API_BASE}/videos",
-                        params={"part": "snippet,topicDetails", "id": ",".join(chunk)},
-                        headers=headers
-                    )
-                    if v_res.status_code == 200:
-                        for v in v_res.json().get("items", []):
-                            if self._is_strictly_music(v):
-                                track = self._parse_music_video(v)
-                                if track:
-                                    tracks[track["id"]] = track
-                except Exception as e:
-                    logger.warning(f"Error validating video categories: {e}")
+            # 3. Deduplicate by videoId
+            seen_vids = set()
+            unique_items = []
+            for item in raw_items:
+                vid = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+                if vid and vid not in seen_vids:
+                    title = item.get("snippet", {}).get("title", "")
+                    if any(bad in title.lower() for bad in ["#shorts", "private video", "deleted video", "short video"]):
+                        continue
+                    seen_vids.add(vid)
+                    unique_items.append(item)
 
-        logger.info(f"Strict Music Filter: Kept {len(tracks)} verified music tracks out of {len(candidate_video_ids)} raw videos.")
+            logger.info(f"Processing and enriching {len(unique_items)} unique YouTube Music tracks...")
+
+            # 4. Parse & Enrich with iTunes official artwork / AAC preview streams concurrently
+            sem = asyncio.Semaphore(12)
+            async def _worker(it):
+                async with sem:
+                    try:
+                        return await self._parse_and_enrich_track(it, client)
+                    except Exception as err:
+                        logger.warning(f"Error enriching track {it.get('snippet', {}).get('title')}: {err}")
+                        return None
+
+            results = await asyncio.gather(*[_worker(it) for it in unique_items], return_exceptions=True)
+            for res in results:
+                if isinstance(res, dict) and res.get("id"):
+                    tracks[res["id"]] = res
+
+        logger.info(f"Successfully processed {len(tracks)} verified YouTube Music tracks.")
         return list(tracks.values())
 
-    def _is_strictly_music(self, video_item: Dict[str, Any]) -> bool:
-        """Determines if a YouTube video is strictly a music track"""
-        snippet = video_item.get("snippet", {})
-        topic_details = video_item.get("topicDetails", {})
-
-        title = snippet.get("title", "")
-        # Filter out obvious non-music shorts and private items
-        if any(bad in title.lower() for bad in ["#shorts", "private video", "deleted video", "short video"]):
-            return False
-
-        # Category 10 is the YouTube API category ID for Music
-        category_id = snippet.get("categoryId")
-        if category_id == "10":
-            return True
-
-        # Check topic categories for Music topics
-        topic_categories = topic_details.get("topicCategories", [])
-        if any("Music" in tc or "music" in tc for tc in topic_categories):
-            return True
-
-        channel_title = snippet.get("channelTitle", "")
-        if channel_title.endswith(" - Topic") or "vevo" in channel_title.lower() or "records" in channel_title.lower():
-            return True
-
-        return False
-
-    def _parse_music_video(self, video_item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        vid = video_item.get("id")
+    async def _parse_and_enrich_track(self, item: Dict[str, Any], client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
+        snippet = item.get("snippet", {})
+        vid = snippet.get("resourceId", {}).get("videoId")
         if not vid:
             return None
 
-        snippet = video_item.get("snippet", {})
         raw_title = snippet.get("title", "Unknown Track")
-        channel = snippet.get("channelTitle", "Various Artists")
+        channel = snippet.get("videoOwnerChannelTitle") or snippet.get("channelTitle") or "Various Artists"
 
         # Clean noise like (Official Music Video), [Official Audio], etc.
         cleaned_title = re.sub(
@@ -201,7 +192,7 @@ class GoogleYouTubeIngestor(BaseIngestor):
         ).strip()
 
         # Parse Artist - Title
-        artist = channel.replace(" - Topic", "").strip()
+        artist = channel.replace(" - Topic", "").replace("VEVO", "").strip()
         song_name = cleaned_title or raw_title
         if " - " in cleaned_title:
             parts = cleaned_title.split(" - ", 1)
@@ -209,17 +200,34 @@ class GoogleYouTubeIngestor(BaseIngestor):
             song_name = parts[1].strip()
 
         cover_url = f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
+        preview_url = f"https://www.youtube.com/watch?v={vid}"
 
-        # AI-driven feature & genre derivation via Gemini-2
+        # Enrich via iTunes Search API for official 600x600 cover and 30s AAC preview stream
+        try:
+            q = urllib.parse.quote(f"{song_name} {artist}".strip())
+            itunes_url = f"https://itunes.apple.com/search?term={q}&entity=song&limit=1"
+            i_res = await client.get(itunes_url, timeout=3.5)
+            if i_res.status_code == 200:
+                i_data = i_res.json()
+                if i_data.get("resultCount", 0) > 0:
+                    it_item = i_data["results"][0]
+                    art = it_item.get("artworkUrl100", "").replace("100x100bb", "600x600bb")
+                    prev = it_item.get("previewUrl", "")
+                    if art:
+                        cover_url = art
+                    if prev:
+                        preview_url = prev
+        except Exception:
+            pass  # Fallback to YouTube artwork and video link
+
+        extracted_genres = []
         vec = GeminiEmbedder.embed_text_sync(f"Track: {song_name}. Artists: {artist}. YouTube Music")
         if vec:
-            if not extracted_genres:
-                extracted_genres = GeminiEmbedder.infer_genres_from_embedding(vec, top_k=3)
+            extracted_genres = GeminiEmbedder.infer_genres_from_embedding(vec, top_k=3)
             features = GeminiEmbedder.infer_acoustic_features_from_embedding(vec)
         else:
-            if not extracted_genres:
-                extracted_genres = ["music"]
-            features = {"energy": 0.50, "valence": 0.50, "danceability": 0.50, "acousticness": 0.20}
+            extracted_genres = ["music"]
+            features = {"energy": 0.60, "valence": 0.55, "danceability": 0.60, "acousticness": 0.20}
 
         return {
             "id": f"youtube:video:{vid}",
@@ -229,8 +237,9 @@ class GoogleYouTubeIngestor(BaseIngestor):
             "genres": extracted_genres,
             "source": "youtube",
             "cover_url": cover_url,
+            "preview_url": preview_url,
             "uri": f"https://music.youtube.com/watch?v={vid}",
-            "popularity": 80,
+            "popularity": 85,
             "play_count": 3,
             "embedding": vec,
             "features": features

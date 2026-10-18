@@ -86,9 +86,11 @@ def get_user_library(
         search=search
     )
 
+from backend.services.ai_agent_service import AIAgentService
+
 @router.post("/chat")
-def mood_chat(payload: ChatRequest):
-    return GraphQueries.mood_chat(user_id=payload.user_id, prompt=payload.prompt)
+async def mood_chat(payload: ChatRequest):
+    return await AIAgentService.process_chat(user_id=payload.user_id, prompt=payload.prompt)
 
 @router.post("/vibe/image")
 def visual_vibe_search(payload: ImageVibeRequest):

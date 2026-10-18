@@ -11,9 +11,12 @@ import {
   Heart, 
   ThumbsDown, 
   Disc, 
+  Disc3,
   User, 
   Radio, 
-  Flame
+  Flame,
+  Trash2,
+  Plus
 } from 'lucide-react';
 
 const SpotifyIcon = ({ size = 14 }) => (
@@ -37,7 +40,11 @@ export default function LibraryDrawer() {
     playTrack, 
     currentTrack, 
     isPlaying,
-    setIsPlaying
+    setIsPlaying,
+    userDecks,
+    selectDeck,
+    deleteDeck,
+    setIsDeckModalOpen
   } = useStore();
 
   const [activeTab, setActiveTab] = useState('insights'); // 'insights', 'artists', 'playlists', 'tracks'
@@ -204,7 +211,7 @@ export default function LibraryDrawer() {
       {/* Tabs Navigation */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateColumns: 'repeat(5, 1fr)',
         gap: '4px',
         padding: '4px',
         background: '#1F1F1F',
@@ -213,6 +220,7 @@ export default function LibraryDrawer() {
       }}>
         {[
           { id: 'insights', label: 'Activity', icon: Heart },
+          { id: 'decks', label: 'Decks', icon: Disc3 },
           { id: 'artists', label: 'Artists', icon: User },
           { id: 'playlists', label: 'Playlists', icon: Disc },
           { id: 'tracks', label: 'Songs', icon: Music },
@@ -422,6 +430,123 @@ export default function LibraryDrawer() {
                 })
               )}
             </div>
+          </div>
+        )}
+
+        {/* TAB: DECKS */}
+        {activeTab === 'decks' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#FFFFFF' }}>Personalized Decks</span>
+              <button
+                onClick={() => setIsDeckModalOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  background: '#FFFFFF',
+                  color: '#000000',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  border: 'none'
+                }}
+              >
+                <Plus size={13} />
+                <span>New Deck</span>
+              </button>
+            </div>
+
+            {(!userDecks || userDecks.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '36px 16px', color: '#9B9B9B', fontSize: '13px' }}>
+                No custom decks created yet. Click "New Deck" or add tracks from search and cards.
+              </div>
+            ) : (
+              userDecks.map((deck) => (
+                <div
+                  key={deck.id}
+                  style={{
+                    background: '#1F1F1F',
+                    border: '1px solid #272727',
+                    borderRadius: '16px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                      <div style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '10px',
+                        background: '#272727',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        {deck.cover_url ? (
+                          <img src={deck.cover_url} alt={deck.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Disc3 size={20} color="#a855f7" />
+                        )}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {deck.name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9B9B9B' }}>
+                          {deck.track_count || 0} tracks · {deck.mood || 'Mix'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        onClick={() => selectDeck(deck.id, deck.name)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          background: '#FFFFFF',
+                          color: '#000000',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Play size={12} fill="#000" />
+                        <span>Play</span>
+                      </button>
+
+                      <button
+                        onClick={() => deleteDeck(deck.id)}
+                        style={{
+                          padding: '6px',
+                          borderRadius: '8px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          cursor: 'pointer'
+                        }}
+                        title="Delete Deck"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 

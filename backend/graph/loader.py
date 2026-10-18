@@ -111,16 +111,18 @@ class GraphLoader:
                 "cover_url": tr.get("cover_url") or "",
                 "preview_url": tr.get("preview_url") or "",
                 "audio_embedding": tr.get("audio_embedding"),
-                "embedding": None,
+                "embedding": tr.get("embedding"),
             })
 
-        # Automatically generate Gemini vector embeddings for every track
+        # Automatically generate Gemini vector embeddings for tracks that don't have one
         try:
             from backend.embeddings.gemini_embedder import GeminiEmbedder
-            embeddings_map = GeminiEmbedder.embed_tracks_batch_sync(cleaned_batch)
-            for item in cleaned_batch:
-                item["embedding"] = embeddings_map.get(item["id"])
-            logger.info(f"Generated {len(embeddings_map)} Gemini embeddings for loaded tracks.")
+            missing_embed = [item for item in cleaned_batch if not item.get("embedding")]
+            if missing_embed:
+                embeddings_map = GeminiEmbedder.embed_tracks_batch_sync(missing_embed)
+                for item in missing_embed:
+                    item["embedding"] = embeddings_map.get(item["id"])
+                logger.info(f"Generated {len(embeddings_map)} Gemini embeddings for loaded tracks.")
         except Exception as e:
             logger.warning(f"Embedding generation error during batch load: {e}")
 

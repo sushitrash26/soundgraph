@@ -8,7 +8,8 @@ import {
   Play, 
   Pause, 
   Music, 
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 
 const SpotifyIcon = ({ size = 15 }) => (
@@ -50,7 +51,8 @@ export default function CardDeck3D() {
     fetchMoreRecommendations,
     isDeckLoadingMore,
     deckMoodFilter,
-    setDeckMoodFilter
+    setDeckMoodFilter,
+    setIsAddToDeckOpen
   } = useStore();
 
   const [swipeDirection, setSwipeDirection] = useState(null); // 'left' | 'right' | null
@@ -385,19 +387,47 @@ export default function CardDeck3D() {
                     <span>{card.source === 'spotify' ? 'Spotify' : 'YouTube Music'}</span>
                   </div>
 
-                  <div style={{
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    background: 'rgba(168, 85, 247, 0.25)',
-                    backdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(168, 85, 247, 0.4)',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    fontFamily: 'var(--font-mono)',
-                    color: '#e9d5ff',
-                    fontVariantNumeric: 'tabular-nums'
-                  }}>
-                    {Math.round((card.score || 0.95) * 100)}% Match
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsAddToDeckOpen(true, card);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: 'rgba(0, 0, 0, 0.65)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        color: '#FFFFFF',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Add to Custom Deck"
+                    >
+                      <Plus size={13} />
+                      <span>Deck</span>
+                    </button>
+
+                    <div style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(168, 85, 247, 0.25)',
+                      backdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(168, 85, 247, 0.4)',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      fontFamily: 'var(--font-mono)',
+                      color: '#e9d5ff',
+                      fontVariantNumeric: 'tabular-nums'
+                    }}>
+                      {Math.round((card.score || 0.95) * 100)}% Match
+                    </div>
                   </div>
                 </div>
 

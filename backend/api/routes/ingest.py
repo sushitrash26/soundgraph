@@ -53,6 +53,7 @@ async def ingest_spotify(background_tasks: BackgroundTasks):
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "spotify", "status": "Ingesting tracks and audio features..."})
             tracks = ingestor.fetch_listening_data()
             count = GraphLoader.load_tracks_batch(profile["id"], tracks)
+            GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
 
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "spotify", "status": f"Loaded {count} Spotify tracks. Running GDS algorithms..."})
             await run_gds_pipeline_async()
@@ -79,12 +80,14 @@ async def ingest_youtube(background_tasks: BackgroundTasks):
                 GraphLoader.upsert_user(profile)
                 tracks = await g_ingestor.fetch_listening_data()
                 count = GraphLoader.load_tracks_batch(profile["id"], tracks)
+                GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
             else:
                 ingestor = YouTubeMusicIngestor(auth_headers=headers)
                 profile = ingestor.fetch_user_profile()
                 GraphLoader.upsert_user(profile)
                 tracks = ingestor.fetch_listening_data()
                 count = GraphLoader.load_tracks_batch(profile["id"], tracks)
+                GraphLoader.load_tracks_batch("astitva_demo_user", tracks)
 
             await ws_manager.broadcast({"type": "ingestion_progress", "stage": "youtube", "status": f"Loaded {count} YouTube tracks. Running GDS algorithms..."})
             await run_gds_pipeline_async()
