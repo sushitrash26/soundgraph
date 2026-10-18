@@ -3,12 +3,16 @@ import { useStore } from './store/useStore';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
+import SpotifyHub from './pages/SpotifyHub';
+import YouTubeHub from './pages/YouTubeHub';
 import AudioPlayerBar from './components/AudioPlayerBar';
 import AcousticLensModal from './components/AcousticLensModal';
 import OmniSearchBar from './components/OmniSearchBar';
 import CreateDeckModal from './components/CreateDeckModal';
 import AddToDeckModal from './components/AddToDeckModal';
 import AIAnswerModal from './components/AIAnswerModal';
+import MigrationModal from './components/MigrationModal';
+import NavbarProfileDropdown from './components/NavbarProfileDropdown';
 import { Music, Network, LayoutDashboard, Sparkles, Radio, Disc3, LogOut, CheckCircle2, Music2 } from 'lucide-react';
 import axios from 'axios';
 
@@ -332,73 +336,7 @@ export default function App() {
             </button>
 
             {user ? (
-              <>
-                {/* User Avatar Chip */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '4px 12px 4px 4px',
-                  borderRadius: '999px',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)'
-                }}>
-                  {user.avatar_url ? (
-                    <img 
-                      src={user.avatar_url} 
-                      alt={user.name} 
-                      style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} 
-                    />
-                  ) : (
-                    <div style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #a855f7, #06b6d4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      color: '#fff'
-                    }}>
-                      {user.name ? user.name.slice(0, 2).toUpperCase() : 'U'}
-                    </div>
-                  )}
-                  <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#fff' }}>
-                    {user.name || 'Astitva'}
-                  </span>
-                </div>
-
-                {/* Logout Button */}
-                <button 
-                  onClick={logout} 
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '50%',
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#ef4444';
-                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = '#94a3b8';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                  }}
-                  title="Log out"
-                >
-                  <LogOut size={14} />
-                </button>
-              </>
+              <NavbarProfileDropdown activeTab={activeTab} setActiveTab={setActiveTab} />
             ) : (
               <button 
                 className="btn-primary" 
@@ -441,6 +379,10 @@ export default function App() {
           <Landing />
         ) : activeTab === 'explorer' ? (
           <Explorer />
+        ) : activeTab === 'spotify' ? (
+          <SpotifyHub />
+        ) : activeTab === 'youtube' ? (
+          <YouTubeHub />
         ) : (
           <Dashboard />
         )}
@@ -473,6 +415,7 @@ export default function App() {
       <CreateDeckModal />
       <AddToDeckModal />
       <AIAnswerModal />
+      <MigrationModal />
     </div>
   );
 }

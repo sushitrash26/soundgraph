@@ -78,6 +78,17 @@ export const useStore = create((set, get) => ({
   isPlaying: false,
   sessionDepth: 1,
   isAcousticLensOpen: false,
+  spotifyProfile: null,
+  youtubeProfile: null,
+  spotifyPlaylists: [],
+  youtubePlaylists: [],
+  isLoadingPlatformData: false,
+  isMigrationModalOpen: false,
+  activeMigrationSource: null,
+  isResolvingTracks: false,
+  migrationResolveData: null,
+  isMigratingExecution: false,
+  migrationResult: null,
 
   setIsAcousticLensOpen: (open) => set({ isAcousticLensOpen: open }),
   toggleAcousticLens: () => set({ isAcousticLensOpen: !get().isAcousticLensOpen }),
@@ -750,5 +761,82 @@ export const useStore = create((set, get) => ({
     set((state) => ({
       liveFeed: [event, ...state.liveFeed.slice(0, 19)],
     }));
+  },
+
+  fetchPlatformData: async (platform) => {
+    set({ isLoadingPlatformData: true });
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const [profRes, plRes] = await Promise.all([
+        axios.get(`${API_BASE}/migration/profile?user_id=${encodeURIComponent(uid)}&platform=${platform}`),
+        axios.get(`${API_BASE}/migration/playlists?user_id=${encodeURIComponent(uid)}&platform=${platform}`)
+      ]);
+      if (platform === 'spotify') {
+        set({ spotifyProfile: profRes.data, spotifyPlaylists: plRes.data, isLoadingPlatformData: false });
+      } else {
+        set({ youtubeProfile: profRes.data, youtubePlaylists: plRes.data, isLoadingPlatformData: false });
+      }
+    } catch (e) {
+      console.error(`Error fetching ${platform} platform data:`, e);
+      set({ isLoadingPlatformData: false });
+    }
+  },
+
+  openMigrationModal: async (playlist, sourcePlatform) => {
+    set({
+      isMigrationModalOpen: true,
+      activeMigrationSource: { playlist, sourcePlatform },
+      isResolvingTracks: true,
+      migrationResolveData: null,
+      migrationResult: null
+    });
+    try {
+      const targetPlatform = sourcePlatform === 'youtube' ? 'spotify' : 'youtube';
+      const tracks = playlist.tracks || [];
+      const res = await axios.post(`${API_BASE}/migration/resolve`, {
+        tracks: tracks,
+        target_platform: targetPlatform
+      });
+      set({ migrationResolveData: res.data, isResolvingTracks: false });
+    } catch (e) {
+      console.error('Error resolving migration tracks:', e);
+      set({ isResolvingTracks: false });
+    }
+  },
+
+  closeMigrationModal: () => {
+    set({
+      isMigrationModalOpen: false,
+      activeMigrationSource: null,
+      migrationResolveData: null,
+      migrationResult: null,
+      isMigratingExecution: false
+    });
+  },
+
+  executeMigration: async (settings) => {
+    set({ isMigratingExecution: true });
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const res = await axios.post(`${API_BASE}/migration/execute`, {
+        user_id: uid,
+        source_platform: settings.sourcePlatform,
+        target_platform: settings.targetPlatform,
+        playlist_title: settings.title,
+        description: settings.description,
+        privacy: settings.privacy,
+        tracks: settings.tracks,
+        method: settings.method || 'direct'
+      });
+      set({ migrationResult: res.data, isMigratingExecution: false });
+    } catch (e) {
+      console.error('Migration execution error:', e);
+      set({
+        migrationResult: { status: 'error', message: 'Failed to complete migration. Please try again.' },
+        isMigratingExecution: false
+      });
+    }
   },
 }));
