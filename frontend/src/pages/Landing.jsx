@@ -485,61 +485,127 @@ export default function Landing() {
             Connect your listening history or test drive with an active taste profile. SoundGraph combines graph neural topology with 30 second acoustic humming recognition to surface music you will genuinely love.
           </p>
 
-          {/* Primary CTA Area: ONE Dominant Action per A1 & User Direction */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', marginBottom: '48px' }}>
-            <button 
-              onClick={handleLaunchQuickDemo}
-              className="btn-main"
-              style={{ padding: '8px 24px', fontSize: '16px' }}
-            >
-              <SparkleIcon size={18} color="#000000" />
-              <span>Explore how it works</span>
-              <ArrowRightIcon size={16} color="#000000" />
-            </button>
+          {/* Primary CTA Area: Connect Spotify & Google as Primary Screen Actions */}
+          <div style={{
+            maxWidth: '580px',
+            margin: '0 auto 48px',
+            backgroundColor: '#181818',
+            border: '1px solid #272727',
+            borderRadius: '16px',
+            padding: '24px',
+            boxShadow: '0 16px 32px rgba(0, 0, 0, 0.4)'
+          }}>
+            <div style={{ fontSize: '16px', fontWeight: '700', color: '#FFFFFF', marginBottom: '4px' }}>
+              Connect your music library to begin
+            </div>
+            <p style={{ fontSize: '14px', color: '#9B9B9B', marginBottom: '20px' }}>
+              Select a streaming provider to synchronize your listening history and generate your graph:
+            </p>
 
-            {/* Zero friction instant guest access line */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px', color: '#666666' }}>
-              <span>Or launch directly:</span>
+            {/* Primary Action Buttons: Spotify & Google */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+              {/* Connect Spotify Button */}
+              <button
+                onClick={handleSpotifyLogin}
+                className="btn-main"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  justifyContent: 'center',
+                  backgroundColor: '#1db954',
+                  color: '#000000',
+                  border: 'none',
+                  boxShadow: '0 4px 16px rgba(29, 185, 84, 0.3)'
+                }}
+              >
+                <SpotifyIcon size={18} color="#000000" />
+                <span>Connect Spotify</span>
+              </button>
+
+              {/* Connect Google Button */}
+              <button
+                onClick={handleGoogleLogin}
+                className="btn-main"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                  color: '#000000',
+                  border: 'none',
+                  boxShadow: '0 4px 16px rgba(255, 255, 255, 0.15)'
+                }}
+              >
+                <YouTubeIcon size={18} color="#ff0033" />
+                <span>Connect Google</span>
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#272727' }} />
+              <span style={{ fontSize: '11px', color: '#666666', fontWeight: '600' }}>OR TEST DRIVE INSTANTLY</span>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#272727' }} />
+            </div>
+
+            {/* Instant Demo and Walkthrough Buttons */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
               <button
                 onClick={loginAsGuest}
                 disabled={isLoading}
+                className="btn-secondary-flat"
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#FFFFFF',
-                  textDecoration: 'underline',
-                  cursor: 'pointer',
+                  flex: '1 1 240px',
+                  padding: '10px 16px',
+                  fontSize: '14px',
                   fontWeight: '600',
-                  padding: 0
+                  justifyContent: 'center',
+                  backgroundColor: '#1F1F1F',
+                  borderColor: '#272727'
                 }}
               >
-                {isLoading ? 'Starting session...' : 'Open Astitva Pathak live profile'}
+                <SparkleIcon size={16} color="#FFFFFF" />
+                <span>{isLoading ? 'Loading session...' : 'Instant demo profile (Astitva Pathak)'}</span>
               </button>
-              <span>·</span>
+
+              <button
+                onClick={handleLaunchQuickDemo}
+                className="btn-secondary-flat"
+                style={{
+                  flex: '1 1 180px',
+                  padding: '10px 16px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  justifyContent: 'center',
+                  backgroundColor: '#1F1F1F',
+                  borderColor: '#272727',
+                  color: '#9B9B9B'
+                }}
+              >
+                <WaveformIcon size={14} color="#9B9B9B" />
+                <span>Explore how it works</span>
+              </button>
+            </div>
+
+            {/* Credentials Setup Helper Links */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', color: '#666666', marginTop: '16px' }}>
+              <span>Need custom API keys?</span>
               <button
                 onClick={() => setSpotifyModal(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#9B9B9B',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
+                style={{ background: 'none', border: 'none', color: '#9B9B9B', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
               >
-                Connect Spotify
+                Configure Spotify app
               </button>
               <span>·</span>
               <button
                 onClick={() => setGoogleModal(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#9B9B9B',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
+                style={{ background: 'none', border: 'none', color: '#9B9B9B', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
               >
-                Connect Google
+                Configure Google OAuth
               </button>
             </div>
           </div>
