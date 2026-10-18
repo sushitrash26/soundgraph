@@ -30,9 +30,23 @@ class DwellTelemetryRequest(BaseModel):
     session_depth: int = 1
     hour: Optional[int] = None
 
+@router.get("/user/taste-profile")
+def get_user_taste_profile(user_id: str = "astitva_demo_user"):
+    return GraphQueries.get_user_taste_profile(user_id=user_id)
+
 @router.get("/recommendations")
-def get_recommendations(user_id: str = "astitva_demo_user", limit: int = 15):
-    return GraphQueries.get_recommendations(user_id=user_id, limit=limit)
+def get_recommendations(
+    user_id: str = "astitva_demo_user", 
+    limit: int = 15,
+    exclude_ids: Optional[str] = Query(None, description="Comma-separated IDs already seen to enable infinite deck polling"),
+    mood: Optional[str] = Query(None, description="Real-time mood filter: euphoric, melancholic, chill, high_energy")
+):
+    return GraphQueries.get_recommendations(
+        user_id=user_id, 
+        limit=limit,
+        exclude_ids=exclude_ids,
+        mood=mood
+    )
 
 @router.post("/recommendations/feedback")
 def record_feedback(payload: FeedbackRequest):
@@ -55,8 +69,22 @@ def record_dwell_telemetry(payload: DwellTelemetryRequest):
     )
 
 @router.get("/library")
-def get_user_library(user_id: str = "astitva_demo_user", limit: int = 50):
-    return GraphQueries.get_user_library(user_id=user_id, limit=limit)
+def get_user_library(
+    user_id: str = "astitva_demo_user", 
+    limit: int = 60,
+    mood: Optional[str] = Query(None),
+    sort: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    search: Optional[str] = Query(None)
+):
+    return GraphQueries.get_user_library(
+        user_id=user_id, 
+        limit=limit,
+        mood=mood,
+        sort=sort,
+        source=source,
+        search=search
+    )
 
 @router.post("/chat")
 def mood_chat(payload: ChatRequest):

@@ -519,6 +519,46 @@ class GraphLoader:
         ]
         cat_count = GraphLoader.load_catalog_tracks(candidate_tracks)
 
+        # Seed realistic cross-platform user playlists
+        try:
+            pl_query = """
+            MATCH (u:User {id: $user_id})
+            MERGE (p1:Playlist {id: 'playlist:spotify:cyberpunk_synth'})
+            ON CREATE SET p1.name = 'Late Night Cyberpunk & Synth',
+                          p1.source = 'spotify',
+                          p1.cover_url = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80',
+                          p1.description = 'High energy synthpop, electronic, and retro futuristic soundscapes',
+                          p1.track_count = 5
+            MERGE (u)-[:OWNS_PLAYLIST]->(p1)
+
+            MERGE (p2:Playlist {id: 'playlist:youtube:bollywood_acoustic'})
+            ON CREATE SET p2.name = 'Acoustic & Bollywood Golden Hours',
+                          p2.source = 'youtube',
+                          p2.cover_url = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80',
+                          p2.description = 'Soulful melodies, acoustic strings, and timeless Bollywood classics',
+                          p2.track_count = 5
+            MERGE (u)-[:OWNS_PLAYLIST]->(p2)
+
+            MERGE (p3:Playlist {id: 'playlist:spotify:indie_rock'})
+            ON CREATE SET p3.name = 'Indie Psych & Rock Odyssey',
+                          p3.source = 'spotify',
+                          p3.cover_url = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80',
+                          p3.description = 'Psychedelic rock, indie riffs, and distorted garage guitars',
+                          p3.track_count = 4
+            MERGE (u)-[:OWNS_PLAYLIST]->(p3)
+
+            MERGE (p4:Playlist {id: 'playlist:youtube:rnb_hiphop'})
+            ON CREATE SET p4.name = 'Modern R&B & HipHop Flow',
+                          p4.source = 'youtube',
+                          p4.cover_url = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80',
+                          p4.description = 'Deep basslines, rhythmic cadences, and melancholic late night vibes',
+                          p4.track_count = 4
+            MERGE (u)-[:OWNS_PLAYLIST]->(p4)
+            """
+            neo4j_conn.query(pl_query, {"user_id": user_id})
+        except Exception as e:
+            logger.warning(f"Error seeding user playlists: {e}")
+
         return {
             "status": "success",
             "user_id": user_id,

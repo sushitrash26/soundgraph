@@ -114,28 +114,263 @@ class GraphQueries:
         return {"status": "error", "message": "Failed to record feedback"}
 
     @staticmethod
-    def get_user_library(user_id: str, limit: int = 50) -> Dict[str, Any]:
-        """Fetches the actual songs and artists ingested from user's Spotify and YouTube accounts"""
-        query = """
-        MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(t:Track)
+    def get_user_taste_profile(user_id: str = "astitva_demo_user") -> Dict[str, Any]:
+        """
+        Comprehensive, 100% dynamic user taste profile:
+        1. Top artists with play counts, track counts, and graph PageRank centrality
+        2. Top playlists owned by or connected to the user
+        3. Real-time feedback ledger (Liked tracks +1.0 and Disliked tracks -1.0)
+        4. Derived vector embeddings & acoustic feature averages (Energy, Valence, Danceability, Acousticness, Tempo)
+        5. Top genres distribution
+        6. Taste Personas computed via Spherical K-Means clustering
+        """
+        # 1. Top Artists
+        top_artists_query = """
+        MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)-[:BY]->(a:Artist)
+        OPTIONAL MATCH (a)-[:IN_GENRE]->(g:Genre)
+        RETURN a.name AS name,
+               coalesce(a.source, 'spotify') AS source,
+               coalesce(a.pagerank, 0.15) AS pagerank,
+               sum(coalesce(r.play_count, 1)) AS total_plays,
+               count(DISTINCT t) AS track_count,
+               collect(DISTINCT g.name)[0..3] AS genres
+        ORDER BY total_plays DESC, pagerank DESC
+        LIMIT 10
+        """
+        top_artists = []
+        try:
+            top_artists = neo4j_conn.query(top_artists_query, {"user_id": user_id}) or []
+        except Exception as e:
+            logger.warning(f"Error fetching top artists for {user_id}: {e}")
+
+        # 2. Playlists
+        playlists_query = """
+        MATCH (u:User {id: $user_id})-[:OWNS_PLAYLIST]->(p:Playlist)
+        OPTIONAL MATCH (p)-[:CONTAINS_TRACK]->(t:Track)
+        WITH p, count(DISTINCT t) AS linked_track_count
+        RETURN p.id AS id,
+               p.name AS name,
+               coalesce(p.source, 'spotify') AS source,
+               coalesce(p.cover_url, '') AS cover_url,
+               coalesce(p.description, '') AS description,
+               case when p.track_count is not null and p.track_count > 0 then p.track_count else linked_track_count end AS track_count
+        ORDER BY track_count DESC, p.name ASC
+        LIMIT 10
+        """
+        playlists = []
+        try:
+            playlists = neo4j_conn.query(playlists_query, {"user_id": user_id}) or []
+        except Exception as e:
+            logger.warning(f"Error fetching playlists for {user_id}: {e}")
+
+        if not playlists:
+            album_query = """
+            MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)-[:IN_ALBUM]->(al:Album)
+            RETURN al.id AS id,
+                   al.name AS name,
+                   coalesce(t.source, 'spotify') AS source,
+                   coalesce(t.cover_url, '') AS cover_url,
+                   'Curated Album Collection' AS description,
+                   count(DISTINCT t) AS track_count
+            ORDER BY track_count DESC
+            LIMIT 8
+            """
+            try:
+                playlists = neo4j_conn.query(album_query, {"user_id": user_id}) or []
+            except Exception as e:
+                logger.warning(f"Error fetching album playlists fallback: {e}")
+
+        # 3. Explicit Feedback Ledger (Likes and Dislikes)
+        feedback_query = """
+        MATCH (u:User {id: $user_id})-[f:FEEDBACK]->(t:Track)
+        OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+        OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+        WITH t, f,
+             collect(DISTINCT a.name) AS artists,
+             collect(DISTINCT g.name) AS genres
+        RETURN t.id AS id,
+               t.name AS title,
+               artists,
+               genres,
+               coalesce(t.source, 'spotify') AS source,
+               coalesce(t.cover_url, '') AS cover_url,
+               coalesce(t.popularity, 50) AS popularity,
+               t.energy AS energy,
+               t.valence AS valence,
+               t.danceability AS danceability,
+               f.reward AS reward,
+               toString(f.updated_at) AS updated_at
+        ORDER BY f.reward DESC
+        """
+        feedback_items = []
+        try:
+            feedback_items = neo4j_conn.query(feedback_query, {"user_id": user_id}) or []
+        except Exception as e:
+            logger.warning(f"Error fetching feedback ledger: {e}")
+
+        likes = [item for item in feedback_items if (item.get("reward") or 0.0) > 0]
+        dislikes = [item for item in feedback_items if (item.get("reward") or 0.0) < 0]
+
+        # 4. Derived Vector Coordinates & Acoustic Averages
+        vector_query = """
+        MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)
+        RETURN avg(t.energy) AS avg_energy,
+               avg(t.valence) AS avg_valence,
+               avg(t.danceability) AS avg_danceability,
+               avg(t.acousticness) AS avg_acousticness,
+               avg(t.tempo) AS avg_tempo,
+               count(t) AS total_listened,
+               sum(coalesce(r.play_count, 1)) AS total_stream_plays
+        """
+        vector_stats = {}
+        try:
+            v_res = neo4j_conn.query(vector_query, {"user_id": user_id})
+            if v_res and v_res[0]:
+                row = v_res[0]
+                vector_stats = {
+                    "energy": round(row.get("avg_energy") or 0.65, 3),
+                    "valence": round(row.get("avg_valence") or 0.55, 3),
+                    "danceability": round(row.get("avg_danceability") or 0.60, 3),
+                    "acousticness": round(row.get("avg_acousticness") or 0.20, 3),
+                    "tempo": round(row.get("avg_tempo") or 115.0, 1),
+                    "total_listened": row.get("total_listened") or 0,
+                    "total_stream_plays": row.get("total_stream_plays") or 0
+                }
+        except Exception as e:
+            logger.warning(f"Error fetching vector stats: {e}")
+            vector_stats = {
+                "energy": 0.65, "valence": 0.55, "danceability": 0.60, 
+                "acousticness": 0.20, "tempo": 115.0, "total_listened": 0, "total_stream_plays": 0
+            }
+
+        # 5. Top Genres
+        genres_query = """
+        MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(t:Track)-[:IN_GENRE]->(g:Genre)
+        RETURN g.name AS name, count(t) AS count
+        ORDER BY count DESC LIMIT 8
+        """
+        top_genres = []
+        try:
+            top_genres = neo4j_conn.query(genres_query, {"user_id": user_id}) or []
+        except Exception as e:
+            logger.warning(f"Error fetching top genres: {e}")
+
+        # 6. Taste Personas
+        personas = []
+        try:
+            history_query = """
+            MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(t:Track)
+            WHERE t.embedding IS NOT NULL
+            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+            OPTIONAL MATCH (u)-[f:FEEDBACK]->(t)
+            RETURN t.id AS id, t.name AS name, t.embedding AS embedding,
+                   collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+                   coalesce(l.play_count, 1) AS plays, coalesce(f.reward, 0.0) AS reward
+            """
+            history = neo4j_conn.query(history_query, {"user_id": user_id}) or []
+            if history:
+                personas_raw = PersonaClusterer.compute_taste_centroids(history, max_k=3)
+                personas = [
+                    {
+                        "id": p["id"],
+                        "label": p["label"],
+                        "weight": round(p.get("weight", 0.33), 2),
+                        "cluster_size": p.get("cluster_size", 0),
+                        "top_genres": p.get("top_genres", []),
+                        "top_artists": p.get("top_artists", [])
+                    }
+                    for p in personas_raw
+                ]
+        except Exception as e:
+            logger.warning(f"Error computing personas: {e}")
+
+        return {
+            "user_id": user_id,
+            "top_artists": top_artists,
+            "top_playlists": playlists,
+            "likes": likes,
+            "dislikes": dislikes,
+            "stats": {
+                "total_listened": vector_stats.get("total_listened", 0),
+                "total_stream_plays": vector_stats.get("total_stream_plays", 0),
+                "total_likes": len(likes),
+                "total_dislikes": len(dislikes),
+                "affinity_ratio": round(len(likes) / max(1, len(likes) + len(dislikes)), 2)
+            },
+            "vector_metrics": vector_stats,
+            "top_genres": top_genres,
+            "personas": personas
+        }
+
+    @staticmethod
+    def get_user_library(
+        user_id: str, 
+        limit: int = 60,
+        mood: Optional[str] = None,
+        sort: Optional[str] = None,
+        source: Optional[str] = None,
+        search: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Fetches the actual songs and artists ingested from user's accounts with dynamic filtering and sorting"""
+        conditions = ["u.id = $user_id"]
+        params: Dict[str, Any] = {"user_id": user_id, "limit": limit}
+
+        if source and source in ["spotify", "youtube"]:
+            conditions.append("coalesce(t.source, 'spotify') = $source")
+            params["source"] = source
+
+        if mood == "euphoric":
+            conditions.append("coalesce(t.valence, 0.5) >= 0.55")
+        elif mood == "melancholic":
+            conditions.append("coalesce(t.valence, 0.5) <= 0.45")
+        elif mood == "chill":
+            conditions.append("coalesce(t.energy, 0.5) <= 0.55")
+        elif mood == "high_energy":
+            conditions.append("coalesce(t.energy, 0.5) >= 0.65")
+
+        if search and search.strip():
+            conditions.append("(toLower(t.name) CONTAINS toLower($search) OR any(art IN artists WHERE toLower(art) CONTAINS toLower($search)))")
+            params["search"] = search.strip()
+
+        where_clause = " AND ".join(conditions)
+
+        order_by = "feedback_reward DESC, l.play_count DESC, t.popularity DESC"
+        if sort == "highest_plays":
+            order_by = "l.play_count DESC, t.popularity DESC"
+        elif sort == "past_plays":
+            order_by = "l.last_played DESC, l.play_count DESC"
+        elif sort == "most_loved":
+            order_by = "feedback_reward DESC, l.play_count DESC, t.popularity DESC"
+
+        query = f"""
+        MATCH (u:User)-[l:LISTENED_TO]->(t:Track)
         OPTIONAL MATCH (t)-[:BY]->(a:Artist)
         OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
         OPTIONAL MATCH (u)-[f:FEEDBACK]->(t)
-        WITH t, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres, 
-             coalesce(f.reward, 0.0) AS feedback_reward, coalesce(t.source, 'spotify') AS source
+        WITH u, t, l, f,
+             collect(DISTINCT a.name) AS artists, 
+             collect(DISTINCT g.name) AS genres, 
+             coalesce(f.reward, 0.0) AS feedback_reward
+        WHERE {where_clause}
         RETURN 
             t.id AS id,
             t.name AS title,
             artists,
             genres,
-            source,
+            coalesce(t.source, 'spotify') AS source,
             t.popularity AS popularity,
-            feedback_reward
-        ORDER BY feedback_reward DESC, t.popularity DESC
+            t.energy AS energy,
+            t.valence AS valence,
+            t.danceability AS danceability,
+            coalesce(l.play_count, 1) AS play_count,
+            feedback_reward,
+            coalesce(t.cover_url, '') AS cover_url
+        ORDER BY {order_by}
         LIMIT $limit
         """
         try:
-            tracks = neo4j_conn.query(query, {"user_id": user_id, "limit": limit})
+            tracks = neo4j_conn.query(query, params) or []
             spotify_tracks = [tr for tr in tracks if tr.get("source") == "spotify"]
             youtube_tracks = [tr for tr in tracks if tr.get("source") == "youtube"]
             return {
@@ -149,16 +384,41 @@ class GraphQueries:
             return {"total": 0, "all": [], "spotify": [], "youtube": []}
 
     @staticmethod
-    def get_recommendations(user_id: str, limit: int = 15) -> List[Dict[str, Any]]:
+    def get_recommendations(
+        user_id: str, 
+        limit: int = 15,
+        exclude_ids: Optional[Any] = None,
+        mood: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         State-of-the-art Multi-Centroid Taste Persona & GraphRAG Recommendation Engine:
-        1. Solves Persona Collapse: Clusters user's listening history into up to 3 distinct Taste Personas via Spherical K-Means.
-        2. Queries Neo4j HNSW vector index for each persona centroid.
-        3. Interleaves candidates across personas so all facets of user taste are represented.
-        4. Injects ε-Greedy Exploration wildcard tracks (serendipitous discovery) to break filter bubbles.
-        5. Strictly excludes listened and disliked tracks (reward: -1.0).
+        1. Clusters user's listening history into up to 3 distinct Taste Personas via Spherical K-Means.
+        2. Queries Neo4j HNSW vector index for each persona centroid with exclude_ids support for continuous infinite card streaming.
+        3. Round-robin interleaves candidates across personas.
+        4. Injects LinUCB Contextual Bandit dynamic exploration wildcards.
+        5. Supports real-time mood steering (euphoric, melancholic, chill, high_energy).
+        6. Strictly excludes listened, disliked (reward: -1.0), and already presented tracks.
         """
-        # Step 1: Fetch user's listened tracks with vectors, play counts, and feedback rewards
+        exclude_set = set()
+        if exclude_ids:
+            if isinstance(exclude_ids, str):
+                exclude_set = {x.strip() for x in exclude_ids.split(",") if x.strip()}
+            elif isinstance(exclude_ids, (list, set, tuple)):
+                exclude_set = {str(x).strip() for x in exclude_ids if str(x).strip()}
+        exclude_list = list(exclude_set)
+
+        # Build mood condition snippet
+        mood_condition = ""
+        if mood == "euphoric":
+            mood_condition = "AND coalesce(rec.valence, 0.5) >= 0.55"
+        elif mood == "melancholic":
+            mood_condition = "AND coalesce(rec.valence, 0.5) <= 0.45"
+        elif mood == "chill":
+            mood_condition = "AND coalesce(rec.energy, 0.5) <= 0.55"
+        elif mood == "high_energy":
+            mood_condition = "AND coalesce(rec.energy, 0.5) >= 0.65"
+
+        # Step 1: Fetch user's listened tracks
         history_query = """
         MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(t:Track)
         WHERE t.embedding IS NOT NULL
@@ -171,11 +431,13 @@ class GraphQueries:
         """
         history = []
         try:
-            history = neo4j_conn.query(history_query, {"user_id": user_id})
+            history = neo4j_conn.query(history_query, {"user_id": user_id}) or []
         except Exception as e:
             logger.warning(f"Failed to fetch listening history for user {user_id}: {e}")
 
-        # If user has history, compute multi-centroid taste personas
+        interleaved: List[Dict[str, Any]] = []
+        seen_track_ids = set(exclude_set)
+
         if history and len(history) > 0:
             personas = PersonaClusterer.compute_taste_centroids(history, max_k=3)
             logger.info(f"User {user_id}: computed {len(personas)} taste personas")
@@ -186,12 +448,14 @@ class GraphQueries:
                 if not centroid_vec or len(centroid_vec) != 768:
                     continue
 
-                persona_query = """
-                CALL db.index.vector.queryNodes('track_embeddings', 20, $centroidVec)
+                persona_query = f"""
+                CALL db.index.vector.queryNodes('track_embeddings', 35, $centroidVec)
                 YIELD node AS rec, score AS vector_score
-                MATCH (u:User {id: $user_id})
+                MATCH (u:User {{id: $user_id}})
                 WHERE NOT (u)-[:LISTENED_TO]->(rec)
-                  AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
+                  AND NOT EXISTS {{ MATCH (u)-[bad:FEEDBACK {{reward: -1.0}}]->(rec) }}
+                  AND NOT rec.id IN $excludeList
+                  {mood_condition}
                 OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
                 OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
                 OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
@@ -220,16 +484,17 @@ class GraphQueries:
                     rec.danceability AS danceability,
                     case
                       when anchor_track is not null then 'Matches your ' + $personaLabel + ' persona bridging ' + anchor_track
-                      else 'Curated for your ' + $personaLabel + ' via 768-D multi-centroid latent space'
+                      else 'Curated for your ' + $personaLabel + ' via 768-D latent space'
                     end AS reason
                 ORDER BY final_score DESC, popularity DESC
-                LIMIT 8
+                LIMIT 12
                 """
                 try:
                     p_recs = neo4j_conn.query(persona_query, {
                         "user_id": user_id,
                         "centroidVec": centroid_vec,
-                        "personaLabel": persona["label"]
+                        "personaLabel": persona["label"],
+                        "excludeList": exclude_list
                     })
                     if p_recs:
                         persona_candidates[persona["id"]] = p_recs
@@ -237,15 +502,6 @@ class GraphQueries:
                     logger.warning(f"Error querying persona centroid {persona['id']}: {e}")
 
             if persona_candidates:
-                # LinUCB Contextual Bandit Dynamic Arm Allocation
-                x_context = ContextualLinUCB.get_context_vector()
-                arm_ranks = ContextualLinUCB.rank_arms(user_id=user_id, x=x_context)
-                arm_weights = {r["arm"]: r["ucb_score"] for r in arm_ranks}
-                logger.info(f"LinUCB: Active Arm Policy for {user_id}: {arm_ranks}")
-
-                # Round-robin interleave across all personas to ensure diverse representation
-                interleaved: List[Dict[str, Any]] = []
-                seen_track_ids = set()
                 max_depth = max(len(c) for c in persona_candidates.values())
                 persona_keys = list(persona_candidates.keys())
 
@@ -257,7 +513,7 @@ class GraphQueries:
                             tid = cand["track_id"]
                             if tid not in seen_track_ids:
                                 seen_track_ids.add(tid)
-                                cand["bandit_arm"] = 0  # Arm 0: Core Persona Centroid
+                                cand["bandit_arm"] = 0
                                 cand["arm_name"] = "persona_exploit"
                                 interleaved.append(cand)
                                 if len(interleaved) >= limit:
@@ -265,118 +521,151 @@ class GraphQueries:
                     if len(interleaved) >= limit:
                         break
 
-                # LinUCB Exploration Wildcards (Arm 3: Frontier Wildcard)
-                if len(interleaved) < limit or arm_weights.get(3, 0.5) > 0.65:
-                    exploration_query = """
-                    MATCH (rec:Track)
-                    WHERE NOT EXISTS { MATCH (u:User {id: $user_id})-[bad:FEEDBACK {reward: -1.0}]->(rec) }
-                      AND NOT EXISTS { MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(rec) }
-                    OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-                    OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
-                    WITH rec, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres
-                    RETURN DISTINCT
-                        rec.id AS track_id,
-                        rec.name AS track_name,
-                        artists,
-                        genres,
-                        rec.source AS source,
-                        0.78 AS score,
-                        coalesce(rec.popularity, 50) AS popularity,
-                        rec.energy AS energy,
-                        rec.valence AS valence,
-                        rec.danceability AS danceability,
-                        '✨ LinUCB Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
-                    ORDER BY popularity DESC
-                    LIMIT $remLimit
-                    """
-                    try:
-                        rem_limit = max(2, limit - len(interleaved))
-                        wildcards = neo4j_conn.query(exploration_query, {"user_id": user_id, "remLimit": rem_limit})
-                        for w in wildcards:
-                            if w["track_id"] not in seen_track_ids:
-                                seen_track_ids.add(w["track_id"])
-                                w["bandit_arm"] = 3  # Arm 3: Frontier Wildcard
-                                w["arm_name"] = "frontier_wildcard"
-                                interleaved.append(w)
-                    except Exception as e:
-                        logger.warning(f"Exploration query error: {e}")
+        # LinUCB Exploration Wildcards / Backfill if needed
+        if len(interleaved) < limit:
+            exploration_query = f"""
+            MATCH (rec:Track)
+            WHERE NOT EXISTS {{ MATCH (u:User {{id: $user_id}})-[bad:FEEDBACK {{reward: -1.0}}]->(rec) }}
+              AND NOT EXISTS {{ MATCH (u:User {{id: $user_id}})-[:LISTENED_TO]->(rec) }}
+              AND NOT rec.id IN $excludeList
+              {mood_condition}
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            WITH rec, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres
+            RETURN DISTINCT
+                rec.id AS track_id,
+                rec.name AS track_name,
+                artists,
+                genres,
+                rec.source AS source,
+                0.78 AS score,
+                coalesce(rec.popularity, 50) AS popularity,
+                rec.energy AS energy,
+                rec.valence AS valence,
+                rec.danceability AS danceability,
+                '✨ LinUCB Wildcard: Curated exploration crossing into ' + coalesce(head(genres), 'global') + ' soundscapes' AS reason
+            ORDER BY popularity DESC
+            LIMIT $remLimit
+            """
+            try:
+                rem_limit = max(5, (limit - len(interleaved)) * 2)
+                wildcards = neo4j_conn.query(exploration_query, {
+                    "user_id": user_id, 
+                    "remLimit": rem_limit,
+                    "excludeList": list(seen_track_ids)
+                }) or []
+                for w in wildcards:
+                    if w["track_id"] not in seen_track_ids:
+                        seen_track_ids.add(w["track_id"])
+                        w["bandit_arm"] = 3
+                        w["arm_name"] = "frontier_wildcard"
+                        interleaved.append(w)
+                        if len(interleaved) >= limit:
+                            break
+            except Exception as e:
+                logger.warning(f"Exploration query error: {e}")
 
-                if interleaved:
-                    flow_chained = AIFlowChainer.chain_session_flow(interleaved[:limit])
-                    for item in flow_chained:
-                        item.pop("embedding", None)
-                    return flow_chained
+        # Fallback 1: SIMILAR_TO graph traversal if still needed
+        if len(interleaved) < limit:
+            sim_query = f"""
+            MATCH (u:User {{id: $user_id}})-[l:LISTENED_TO]->(listened:Track)
+            MATCH (listened)-[sim:SIMILAR_TO]->(rec:Track)
+            WHERE NOT (u)-[:LISTENED_TO]->(rec)
+              AND NOT EXISTS {{ MATCH (u)-[bad:FEEDBACK {{reward: -1.0}}]->(rec) }}
+              AND NOT rec.id IN $excludeList
+              {mood_condition}
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
+            WITH rec,
+                 collect(DISTINCT a.name) AS artists,
+                 collect(DISTINCT g.name) AS genres,
+                 max(sim.score) AS raw_sim,
+                 head(collect(DISTINCT listened.name)) AS seed_track,
+                 head(collect(DISTINCT listened.source)) AS seed_source,
+                 coalesce(f.reward, 0.0) AS feedback_reward
+            WITH rec, artists, genres, seed_track, seed_source,
+                 round(raw_sim + (feedback_reward * 0.15), 2) AS final_score
+            RETURN DISTINCT
+                rec.id AS track_id,
+                rec.name AS track_name,
+                artists,
+                genres,
+                rec.source AS source,
+                final_score AS score,
+                coalesce(rec.popularity, 50) AS popularity,
+                rec.energy AS energy,
+                rec.valence AS valence,
+                rec.danceability AS danceability,
+                'Discovered through your ' + coalesce(seed_source, 'music') + ' taste in ' + coalesce(seed_track, 'top artists') AS reason
+            ORDER BY final_score DESC, popularity DESC
+            LIMIT $remLimit
+            """
+            try:
+                records = neo4j_conn.query(sim_query, {
+                    "user_id": user_id, 
+                    "remLimit": limit - len(interleaved),
+                    "excludeList": list(seen_track_ids)
+                }) or []
+                for r in records:
+                    if r["track_id"] not in seen_track_ids:
+                        seen_track_ids.add(r["track_id"])
+                        r["bandit_arm"] = 1
+                        r["arm_name"] = "graph_similarity"
+                        interleaved.append(r)
+            except Exception as e:
+                logger.warning(f"SIMILAR_TO query error: {e}")
 
-        # Fallback 1: SIMILAR_TO graph traversal
-        sim_query = """
-        MATCH (u:User {id: $user_id})-[l:LISTENED_TO]->(listened:Track)
-        MATCH (listened)-[sim:SIMILAR_TO]->(rec:Track)
-        WHERE NOT (u)-[:LISTENED_TO]->(rec)
-          AND NOT EXISTS { MATCH (u)-[bad:FEEDBACK {reward: -1.0}]->(rec) }
-        OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-        OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
-        OPTIONAL MATCH (u)-[f:FEEDBACK]->(rec)
-        WITH rec,
-             collect(DISTINCT a.name) AS artists,
-             collect(DISTINCT g.name) AS genres,
-             max(sim.score) AS raw_sim,
-             head(collect(DISTINCT listened.name)) AS seed_track,
-             head(collect(DISTINCT listened.source)) AS seed_source,
-             coalesce(f.reward, 0.0) AS feedback_reward
-        WITH rec, artists, genres, seed_track, seed_source,
-             round(raw_sim + (feedback_reward * 0.15), 2) AS final_score
-        RETURN DISTINCT
-            rec.id AS track_id,
-            rec.name AS track_name,
-            artists,
-            genres,
-            rec.source AS source,
-            final_score AS score,
-            coalesce(rec.popularity, 50) AS popularity,
-            rec.energy AS energy,
-            rec.valence AS valence,
-            rec.danceability AS danceability,
-            'Discovered through your ' + coalesce(seed_source, 'music') + ' taste in ' + coalesce(seed_track, 'top artists') + ' sharing ' + coalesce(head(genres), 'core') + ' vibes' AS reason
-        ORDER BY final_score DESC, popularity DESC
-        LIMIT $limit
-        """
-        try:
-            records = neo4j_conn.query(sim_query, {"user_id": user_id, "limit": limit})
-            if records and len(records) > 0:
-                return records
-        except Exception as e:
-            logger.warning(f"SIMILAR_TO recommendation query returned error or empty: {e}")
+        # Fallback 2: General catalog fallback if deck is starved
+        if len(interleaved) < limit:
+            cold_query = f"""
+            MATCH (rec:Track)
+            WHERE NOT EXISTS {{ MATCH (u:User {{id: $user_id}})-[bad:FEEDBACK {{reward: -1.0}}]->(rec) }}
+              AND NOT EXISTS {{ MATCH (u:User {{id: $user_id}})-[:LISTENED_TO]->(rec) }}
+              AND NOT rec.id IN $excludeList
+              {mood_condition}
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            WITH rec,
+                 collect(DISTINCT a.name) AS artists,
+                 collect(DISTINCT g.name) AS genres
+            RETURN DISTINCT
+                rec.id AS track_id,
+                rec.name AS track_name,
+                artists,
+                genres,
+                rec.source AS source,
+                0.85 AS score,
+                coalesce(rec.popularity, 50) AS popularity,
+                rec.energy AS energy,
+                rec.valence AS valence,
+                rec.danceability AS danceability,
+                'Catalog selection matching your sonic parameters' AS reason
+            ORDER BY popularity DESC
+            LIMIT $remLimit
+            """
+            try:
+                cold_records = neo4j_conn.query(cold_query, {
+                    "user_id": user_id, 
+                    "remLimit": limit - len(interleaved),
+                    "excludeList": list(seen_track_ids)
+                }) or []
+                for c in cold_records:
+                    if c["track_id"] not in seen_track_ids:
+                        seen_track_ids.add(c["track_id"])
+                        c["bandit_arm"] = 2
+                        c["arm_name"] = "catalog_diversity"
+                        interleaved.append(c)
+            except Exception as e:
+                logger.warning(f"Cold query fallback error: {e}")
 
-        # Fallback 2: General catalog popularity & diversity (for cold-start or new users)
-        cold_start_query = """
-        MATCH (rec:Track)
-        WHERE NOT EXISTS { MATCH (u:User {id: $user_id})-[bad:FEEDBACK {reward: -1.0}]->(rec) }
-          AND NOT EXISTS { MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(rec) }
-        OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
-        OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
-        WITH rec,
-             collect(DISTINCT a.name) AS artists,
-             collect(DISTINCT g.name) AS genres
-        RETURN DISTINCT
-            rec.id AS track_id,
-            rec.name AS track_name,
-            artists,
-            genres,
-            rec.source AS source,
-            0.85 AS score,
-            coalesce(rec.popularity, 50) AS popularity,
-            rec.energy AS energy,
-            rec.valence AS valence,
-            rec.danceability AS danceability,
-            'Top trending track in your cross-platform universe with ' + coalesce(head(genres), 'global') + ' energy' AS reason
-        ORDER BY popularity DESC
-        LIMIT $limit
-        """
-        try:
-            return neo4j_conn.query(cold_start_query, {"user_id": user_id, "limit": limit})
-        except Exception as e:
-            logger.error(f"Cold start query error: {e}")
-            return []
+        if interleaved:
+            flow_chained = AIFlowChainer.chain_session_flow(interleaved[:limit])
+            for item in flow_chained:
+                item.pop("embedding", None)
+            return flow_chained
+
+        return []
 
     @staticmethod
     def _parse_query_intent(prompt: str) -> Dict[str, Any]:

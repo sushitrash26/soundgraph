@@ -22,6 +22,30 @@ export const useStore = create((set, get) => ({
     similar_to_edges_count: 0,
     listened_to_edges_count: 0,
   },
+  tasteProfile: {
+    top_artists: [],
+    top_playlists: [],
+    likes: [],
+    dislikes: [],
+    stats: {
+      total_listened: 0,
+      total_stream_plays: 0,
+      total_likes: 0,
+      total_dislikes: 0,
+      affinity_ratio: 0
+    },
+    vector_metrics: {
+      energy: 0.65,
+      valence: 0.55,
+      danceability: 0.60,
+      acousticness: 0.20,
+      tempo: 115.0
+    },
+    personas: []
+  },
+  deckMoodFilter: null,
+  swipedIds: new Set(),
+  isDeckLoadingMore: false,
   recommendations: [],
   library: { total: 0, all: [], spotify: [], youtube: [] },
   topArtists: [],
@@ -117,14 +141,73 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  fetchLibrary: async () => {
+  fetchTasteProfile: async () => {
     try {
       const user = get().user;
       const uid = user?.id || 'astitva_demo_user';
-      const res = await axios.get(`${API_BASE}/library?user_id=${encodeURIComponent(uid)}&limit=60`);
+      const res = await axios.get(`${API_BASE}/user/taste-profile?user_id=${encodeURIComponent(uid)}`);
+      if (res.data) {
+        set({ tasteProfile: res.data });
+      }
+    } catch (e) {
+      console.error('Failed to fetch taste profile:', e);
+    }
+  },
+
+  fetchLibrary: async (params = {}) => {
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const q = new URLSearchParams({ user_id: uid, limit: params.limit || 60 });
+      if (params.mood && params.mood !== 'all') q.append('mood', params.mood);
+      if (params.sort) q.append('sort', params.sort);
+      if (params.source && params.source !== 'all') q.append('source', params.source);
+      if (params.search) q.append('search', params.search);
+
+      const res = await axios.get(`${API_BASE}/library?${q.toString()}`);
       set({ library: res.data });
     } catch (e) {
       console.error('Failed to fetch library:', e);
+    }
+  },
+
+  setDeckMoodFilter: async (mood) => {
+    set({ deckMoodFilter: mood });
+    await get().fetchRecommendations(true, mood);
+  },
+
+  fetchMoreRecommendations: async () => {
+    const { isDeckLoadingMore, recommendations, swipedIds, deckMoodFilter } = get();
+    if (isDeckLoadingMore) return;
+    set({ isDeckLoadingMore: true });
+    
+    try {
+      const user = get().user;
+      const uid = user?.id || 'astitva_demo_user';
+      const existingIds = new Set(recommendations.map(t => t.track_id || t.id));
+      const allExcluded = Array.from(new Set([...Array.from(swipedIds || []), ...Array.from(existingIds)]));
+
+      const q = new URLSearchParams({
+        user_id: uid,
+        limit: 10
+      });
+      if (allExcluded.length > 0) {
+        q.append('exclude_ids', allExcluded.slice(-50).join(','));
+      }
+      if (deckMoodFilter && deckMoodFilter !== 'all') {
+        q.append('mood', deckMoodFilter);
+      }
+
+      const res = await axios.get(`${API_BASE}/recommendations?${q.toString()}`);
+      const freshCards = (res.data || []).filter(c => !existingIds.has(c.track_id || c.id));
+
+      set((state) => ({
+        recommendations: [...state.recommendations, ...freshCards],
+        isDeckLoadingMore: false
+      }));
+    } catch (e) {
+      console.warn('Failed to poll background cards:', e);
+      set({ isDeckLoadingMore: false });
     }
   },
 
@@ -137,11 +220,48 @@ export const useStore = create((set, get) => ({
         track_id: trackId,
         reward: reward
       });
-      // Dynamically filter or update current recommendation list
-      set((state) => ({
-        recommendations: state.recommendations.filter(t => (t.track_id || t.id) !== trackId),
-        statusMessage: reward > 0 ? '✨ Saved affinity to Graph (+1.0 reward)' : 'Pruned branch from discovery queue (-1.0 penalty)'
-      }));
+
+      const nextSwiped = new Set(get().swipedIds || []);
+      nextSwiped.add(trackId);
+
+      const card = get().recommendations.find(t => (t.track_id || t.id) === trackId);
+      const remainingCards = get().recommendations.filter(t => (t.track_id || t.id) !== trackId);
+
+      set((state) => {
+        const nextLikes = reward > 0 
+          ? [card ? { id: card.track_id || card.id, title: card.track_name || card.name, artists: card.artists || [], genres: card.genres || [], source: card.source || 'spotify', reward: 1.0, cover_url: card.cover_url || '' } : { id: trackId, title: 'Liked Track', artists: [], genres: [], reward: 1.0 }, ...state.tasteProfile.likes.filter(l => l.id !== trackId)]
+          : state.tasteProfile.likes.filter(l => l.id !== trackId);
+
+        const nextDislikes = reward < 0
+          ? [card ? { id: card.track_id || card.id, title: card.track_name || card.name, artists: card.artists || [], genres: card.genres || [], source: card.source || 'spotify', reward: -1.0, cover_url: card.cover_url || '' } : { id: trackId, title: 'Disliked Track', artists: [], genres: [], reward: -1.0 }, ...state.tasteProfile.dislikes.filter(d => d.id !== trackId)]
+          : state.tasteProfile.dislikes.filter(d => d.id !== trackId);
+
+        const totalL = nextLikes.length;
+        const totalD = nextDislikes.length;
+        const ratio = totalL + totalD > 0 ? Math.round((totalL / (totalL + totalD)) * 100) / 100 : 0;
+
+        return {
+          swipedIds: nextSwiped,
+          recommendations: remainingCards,
+          statusMessage: reward > 0 ? '✨ Affinity recorded in graph (+1.0 reward)' : 'Pruned branch from discovery queue (-1.0 penalty)',
+          tasteProfile: {
+            ...state.tasteProfile,
+            likes: nextLikes,
+            dislikes: nextDislikes,
+            stats: {
+              ...state.tasteProfile.stats,
+              total_likes: totalL,
+              total_dislikes: totalD,
+              affinity_ratio: ratio
+            }
+          }
+        };
+      });
+
+      // Low-watermark continuous background polling: when remaining cards < 5, automatically fetch next batch!
+      if (remainingCards.length < 5) {
+        get().fetchMoreRecommendations();
+      }
     } catch (e) {
       console.error('Failed to send RLHF feedback:', e);
     }
@@ -294,7 +414,8 @@ export const useStore = create((set, get) => ({
 
   refreshDashboard: async () => {
     await get().fetchStats();
-    await get().fetchRecommendations();
+    await get().fetchTasteProfile();
+    await get().fetchRecommendations(true);
     await get().fetchLibrary();
     await get().fetchTopArtists();
     await get().fetchGraphData();
@@ -310,15 +431,37 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  fetchRecommendations: async () => {
+  fetchRecommendations: async (reset = true, customMood = null) => {
     try {
       const user = get().user;
       const uid = user?.id || 'astitva_demo_user';
-      const res = await axios.get(`${API_BASE}/recommendations?user_id=${encodeURIComponent(uid)}&limit=10`);
-      set({ recommendations: res.data });
-      if (res.data.length > 0 && !get().selectedTrack) {
-        set({ selectedTrack: res.data[0] });
-        get().fetchExplanation(res.data[0].track_id);
+      const activeMood = customMood !== null ? customMood : get().deckMoodFilter;
+
+      const q = new URLSearchParams({
+        user_id: uid,
+        limit: 12
+      });
+      if (activeMood && activeMood !== 'all') {
+        q.append('mood', activeMood);
+      }
+
+      const res = await axios.get(`${API_BASE}/recommendations?${q.toString()}`);
+      const freshCards = res.data || [];
+
+      if (reset) {
+        set({ recommendations: freshCards });
+        if (freshCards.length > 0 && !get().selectedTrack) {
+          set({ selectedTrack: freshCards[0] });
+          get().fetchExplanation(freshCards[0].track_id);
+        }
+      } else {
+        set((state) => {
+          const existingIds = new Set(state.recommendations.map(t => t.track_id || t.id));
+          const deduped = freshCards.filter(c => !existingIds.has(c.track_id || c.id));
+          return {
+            recommendations: [...state.recommendations, ...deduped]
+          };
+        });
       }
     } catch (e) {
       console.error('Failed to fetch recommendations:', e);

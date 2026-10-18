@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import CardDeck3D from '../components/CardDeck3D';
 import LibraryDrawer from '../components/LibraryDrawer';
 import MoodChatModal from '../components/MoodChatModal';
-import { Sparkles, RefreshCw, MessageSquare, Flame, Music, Radio, Compass, Play } from 'lucide-react';
+import { Sparkles, RefreshCw, MessageSquare, Compass, Radio } from 'lucide-react';
 
 export default function Dashboard() {
   const { 
     recommendations, 
     fetchRecommendations, 
     fetchLibrary,
+    fetchTasteProfile,
+    tasteProfile,
     topArtists,
     fetchTopArtists,
     toggleChat,
@@ -17,13 +19,16 @@ export default function Dashboard() {
     user
   } = useStore();
 
-  const [activeDeckFilter, setActiveDeckFilter] = useState('all');
-
   useEffect(() => {
-    fetchRecommendations();
+    fetchTasteProfile();
+    fetchRecommendations(true);
     fetchLibrary();
     fetchTopArtists();
   }, []);
+
+  const coreArtists = (tasteProfile?.top_artists && tasteProfile.top_artists.length > 0)
+    ? tasteProfile.top_artists
+    : topArtists;
 
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '32px 24px' }}>
@@ -32,47 +37,47 @@ export default function Dashboard() {
       {/* Top Banner Status Bar */}
       {statusMessage && (
         <div style={{
-          marginBottom: '20px',
-          padding: '10px 18px',
+          marginBottom: '24px',
+          padding: '12px 18px',
           borderRadius: '12px',
-          background: 'rgba(168, 85, 247, 0.1)',
-          border: '1px solid rgba(168, 85, 247, 0.25)',
-          color: '#e9d5ff',
+          background: '#1F1F1F',
+          border: '1px solid #313131',
+          color: '#FFFFFF',
           fontSize: '13px',
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
         }}>
-          <Sparkles size={15} color="#c084fc" />
+          <Sparkles size={15} color="#a855f7" />
           <span>{statusMessage}</span>
         </div>
       )}
 
-      {/* Main Commercial Layout: Left Library + Right 3D Experience */}
+      {/* Main Commercial Layout: Left Taste Ledger + Right 3D Infinite Deck */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '360px minmax(0, 1fr)',
+        gridTemplateColumns: '440px minmax(0, 1fr)',
         gap: '32px',
         alignItems: 'start'
       }}>
-        {/* Left Section: Real Ingested Telemetry Drawer */}
-        <div style={{ position: 'sticky', top: '90px', height: 'calc(100vh - 120px)' }}>
+        {/* Left Section: Technical Taste Ledger & Ingestion Analytics */}
+        <div style={{ position: 'sticky', top: '96px', height: 'calc(100vh - 128px)' }}>
           <LibraryDrawer />
         </div>
 
-        {/* Right Section: Awwwards 3D Card Deck & Discovery Engine */}
+        {/* Right Section: Infinite 3D Shuffling Discovery Engine */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           
-          {/* Hero Pitch Banner */}
+          {/* Pitch & Overview Surface */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '24px 28px',
-            background: 'linear-gradient(135deg, rgba(28, 28, 38, 0.7) 0%, rgba(18, 18, 24, 0.9) 100%)',
+            background: '#181818',
             borderRadius: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)'
+            border: '1px solid #272727',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
           }}>
             <div>
               <div style={{
@@ -83,63 +88,63 @@ export default function Dashboard() {
                 fontWeight: '700',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: '#c084fc',
+                color: '#a855f7',
                 marginBottom: '8px'
               }}>
-                <Sparkles size={13} /> Graph-RLHF Discovery Multiverse
+                <Radio size={13} /> Graph-RAG Multiverse Discovery
               </div>
               <h1 style={{
                 fontSize: '28px',
-                fontWeight: '800',
-                color: '#fff',
-                fontFamily: 'var(--font-heading)',
-                margin: '0 0 6px'
+                fontWeight: '700',
+                background: 'linear-gradient(to right, #FFFFFF 0%, #9B9B9B 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                margin: '0 0 6px',
+                letterSpacing: '-0.02em'
               }}>
                 Curated Recommendations
               </h1>
-              <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0 }}>
-                Driven by your unified Spotify & YouTube graph topology. Every swipe trains your weights.
+              <p style={{ fontSize: '13px', color: '#9B9B9B', margin: 0, maxWidth: '580px' }}>
+                Infinite 3D card stream powered by Neo4j HNSW vector indices and LinUCB contextual bandits. Every swipe trains your latent graph weights.
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button
                 onClick={toggleChat}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '10px 18px',
-                  borderRadius: '14px',
-                  background: 'linear-gradient(135deg, #a855f7 0%, #06b6d4 100%)',
+                  padding: '8px 16px',
+                  borderRadius: '12px',
+                  background: '#FFFFFF',
                   border: 'none',
-                  color: '#fff',
+                  color: '#000000',
                   fontSize: '13px',
-                  fontWeight: '700',
+                  fontWeight: '600',
                   cursor: 'pointer',
-                  boxShadow: '0 8px 24px rgba(168, 85, 247, 0.3)',
-                  transition: 'transform 0.2s ease'
+                  transition: 'all 0.2s var(--ease-fluid)'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
               >
-                <MessageSquare size={15} /> Ask Vibe AI
+                <MessageSquare size={14} color="#000000" />
+                <span>Ask Vibe AI</span>
               </button>
 
               <button
-                onClick={fetchRecommendations}
+                onClick={() => fetchRecommendations(true)}
                 style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '14px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
+                  background: '#272727',
+                  border: '1px solid #313131',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: '#fff',
+                  color: '#FFFFFF',
                   cursor: 'pointer',
-                  transition: 'background 0.2s ease'
+                  transition: 'all 0.2s var(--ease-fluid)'
                 }}
                 title="Refresh Recommendations"
               >
@@ -148,65 +153,58 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* 3D Smart Card Deck Centerpiece */}
+          {/* 3D Smart Infinite Card Deck Centerpiece */}
           <div style={{
-            padding: '36px 20px',
-            background: 'radial-gradient(ellipse at top, rgba(168, 85, 247, 0.08) 0%, rgba(10, 11, 16, 0.6) 70%)',
-            borderRadius: '28px',
-            border: '1px solid rgba(255, 255, 255, 0.06)'
+            padding: '32px 24px',
+            background: '#181818',
+            borderRadius: '24px',
+            border: '1px solid #272727',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
           }}>
             <CardDeck3D />
           </div>
 
-          {/* Bottom Discovery Shelf: High PageRank Taste Influencers */}
-          {topArtists && topArtists.length > 0 && (
+          {/* Bottom Discovery Shelf: Core Taste Anchors (Graph PageRank Centrality) */}
+          {coreArtists && coreArtists.length > 0 && (
             <div style={{
-              background: 'rgba(20, 20, 28, 0.6)',
-              backdropFilter: 'blur(20px)',
+              background: '#181818',
               borderRadius: '24px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              padding: '24px'
+              border: '1px solid #272727',
+              padding: '24px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Compass size={18} color="#06b6d4" />
-                  <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#fff', margin: 0 }}>
-                    Core Taste Anchors (Graph PageRank Centrality)
+                  <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#FFFFFF', margin: 0, letterSpacing: '-0.02em' }}>
+                    Core Taste Anchors
                   </h3>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Architectural centers of your combined musical world
+                <span style={{ fontSize: '12px', color: '#9B9B9B' }}>
+                  Architectural PageRank centers of your graph topology
                 </span>
               </div>
 
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '14px'
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: '12px'
               }}>
-                {topArtists.slice(0, 6).map((art, idx) => (
+                {coreArtists.slice(0, 6).map((art, idx) => (
                   <div
                     key={idx}
                     style={{
                       padding: '14px 16px',
-                      borderRadius: '16px',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '14px',
+                      background: '#1F1F1F',
+                      border: '1px solid #272727',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '4px',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-                      e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                      transition: 'all 0.2s var(--ease-fluid)'
                     }}
                   >
-                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {art.name}
                     </div>
                     <div style={{ fontSize: '11px', color: '#06b6d4' }}>
@@ -214,10 +212,12 @@ export default function Dashboard() {
                     </div>
                     <div style={{
                       fontSize: '11px',
-                      color: 'var(--text-dim)',
-                      marginTop: '4px'
+                      fontFamily: 'var(--font-mono)',
+                      color: '#9B9B9B',
+                      marginTop: '4px',
+                      fontVariantNumeric: 'tabular-nums'
                     }}>
-                      Influence Score: {Math.round((art.pagerank || 0.15) * 100)}%
+                      Influence: {Math.round((art.pagerank || 0.15) * 100)}%
                     </div>
                   </div>
                 ))}
