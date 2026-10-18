@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Disc3 } from 'lucide-react';
+import { X, Disc3 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export default function CreateDeckModal() {
@@ -29,41 +29,94 @@ export default function CreateDeckModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-[#161616] border border-white/10 rounded-3xl p-6 shadow-2xl">
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 200,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      background: 'rgba(0, 0, 0, 0.8)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: '440px',
+        background: '#181818',
+        border: '1px solid #272727',
+        borderRadius: '24px',
+        padding: '28px',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.9)'
+      }}>
+        {/* Close Button */}
         <button
           onClick={() => setIsDeckModalOpen(false)}
-          className="absolute top-5 right-5 p-1 text-neutral-400 hover:text-white transition-colors"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'none',
+            border: 'none',
+            color: '#9B9B9B',
+            cursor: 'pointer',
+            padding: '4px'
+          }}
         >
-          <X className="w-5 h-5" />
+          <X size={18} />
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-2xl bg-neutral-800 flex items-center justify-center border border-white/10 text-neutral-200">
-            <Disc3 className="w-5 h-5" />
+        {/* Modal Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '22px' }}>
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '14px',
+            background: '#272727',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid #313131'
+          }}>
+            <Disc3 size={20} color="#a855f7" />
           </div>
           <div>
-            <h3 className="text-base font-semibold text-white">Create New Deck</h3>
-            <p className="text-xs text-neutral-400">Curate your own personalized stack of music</p>
+            <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#FFFFFF', margin: 0 }}>Create New Deck</h3>
+            <p style={{ fontSize: '12px', color: '#9B9B9B', margin: '2px 0 0' }}>Curate a personalized stack of music</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">Deck Name</label>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#FFFFFF', marginBottom: '8px' }}>
+              Deck Name
+            </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Midnight Tokyo Drives"
-              className="w-full px-4 py-2.5 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                background: '#1F1F1F',
+                border: '1px solid #272727',
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontFamily: 'var(--font-main)',
+                outline: 'none'
+              }}
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">Mood & Theme</label>
-            <div className="grid grid-cols-3 gap-2">
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#FFFFFF', marginBottom: '8px' }}>
+              Mood Theme
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
               {[
                 { id: 'chill', label: '🌙 Chill' },
                 { id: 'focus', label: '☕ Focus' },
@@ -71,35 +124,64 @@ export default function CreateDeckModal() {
                 { id: 'party', label: '🎉 Party' },
                 { id: 'melancholy', label: '🌧️ Moody' },
                 { id: 'general', label: '✨ Mix' }
-              ].map((m) => (
-                <button
-                  type="button"
-                  key={m.id}
-                  onClick={() => setMood(m.id)}
-                  className={`py-2 px-3 rounded-xl text-xs font-medium border transition-colors ${
-                    mood === m.id
-                      ? 'bg-white text-black border-white'
-                      : 'bg-neutral-900 border-white/5 text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
+              ].map((m) => {
+                const isSelected = mood === m.id;
+                return (
+                  <button
+                    type="button"
+                    key={m.id}
+                    onClick={() => setMood(m.id)}
+                    style={{
+                      padding: '10px 8px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: isSelected ? '700' : '500',
+                      cursor: 'pointer',
+                      background: isSelected ? '#FFFFFF' : '#1F1F1F',
+                      color: isSelected ? '#000000' : '#9B9B9B',
+                      border: isSelected ? '1px solid #FFFFFF' : '1px solid #272727',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '8px' }}>
             <button
               type="button"
               onClick={() => setIsDeckModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white transition-colors"
+              style={{
+                padding: '9px 18px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                background: 'none',
+                border: 'none',
+                color: '#9B9B9B',
+                cursor: 'pointer'
+              }}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim() || isSubmitting}
-              className="px-5 py-2 rounded-xl text-xs font-semibold bg-white text-black hover:bg-neutral-200 disabled:opacity-50 transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)]"
+              style={{
+                padding: '9px 22px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: '700',
+                background: '#FFFFFF',
+                color: '#000000',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 0 16px rgba(255, 255, 255, 0.25)',
+                opacity: (!name.trim() || isSubmitting) ? 0.5 : 1
+              }}
             >
               {isSubmitting ? 'Creating...' : 'Create Deck'}
             </button>

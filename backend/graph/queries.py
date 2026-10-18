@@ -983,7 +983,7 @@ class GraphQueries:
             rec.energy AS energy,
             rec.valence AS valence,
             rec.danceability AS danceability,
-            'Visual Vibe match (' + toString(toInteger(round(vector_score * 100))) + '%) from image aesthetics via Gemini-2 multimodal latent space' AS reason
+            'Visual Vibe match (' + toString(toInteger(round(vector_score * 100))) + '%) · Matches your visual aesthetic' AS reason
         ORDER BY final_score DESC, popularity DESC
         LIMIT 6
         """

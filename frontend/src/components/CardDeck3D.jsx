@@ -31,8 +31,14 @@ const cleanReason = (reason) => {
     .replace(/^spotify\s+catalog\s*:?\s*/i, '')
     .replace(/^youtube\s+music\s*:?\s*/i, '')
     .replace(/^catalog\s+selection\s*:?\s*/i, '')
-    .replace(/via\s+768-d\s+latent\s+space/i, '')
+    .replace(/via\s+gemini-?\d*\s+multimodal\s+latent\s+space/gi, '')
+    .replace(/from\s+image\s+aesthetics\s+via\s+gemini[^\.]*/gi, 'Matches your visual aesthetic')
+    .replace(/via\s+768-?d\s+(vector\s+embeddings\s+&?\s*)?(latent\s+space)?/gi, '')
+    .replace(/via\s+neo4j\s+graph\s+topology/gi, '')
+    .replace(/multimodal\s+latent\s+space/gi, '')
+    .replace(/\s+/g, ' ')
     .trim();
+  cleaned = cleaned.replace(/(\s+via|\s+from|:)$/i, '').trim();
   if (cleaned.length > 0) {
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }

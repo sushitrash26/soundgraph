@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Plus, Disc3, Check } from 'lucide-react';
+import { X, Plus, Disc3 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export default function AddToDeckModal() {
@@ -19,61 +19,148 @@ export default function AddToDeckModal() {
   const artistName = trackToAddToDeck.artists ? trackToAddToDeck.artists.join(', ') : 'Artist';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-sm bg-[#161616] border border-white/10 rounded-3xl p-6 shadow-2xl">
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 200,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      background: 'rgba(0, 0, 0, 0.8)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: '400px',
+        background: '#181818',
+        border: '1px solid #272727',
+        borderRadius: '24px',
+        padding: '24px',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.9)'
+      }}>
+        {/* Close Button */}
         <button
           onClick={() => setIsAddToDeckOpen(false)}
-          className="absolute top-5 right-5 p-1 text-neutral-400 hover:text-white transition-colors"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'none',
+            border: 'none',
+            color: '#9B9B9B',
+            cursor: 'pointer',
+            padding: '4px'
+          }}
         >
-          <X className="w-5 h-5" />
+          <X size={18} />
         </button>
 
-        <h3 className="text-base font-semibold text-white mb-1">Add to Deck</h3>
-        <p className="text-xs text-neutral-400 truncate mb-4">
-          "{trackName}" — <span className="text-neutral-500">{artistName}</span>
+        <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#FFFFFF', margin: '0 0 4px' }}>Add to Deck</h3>
+        <p style={{ fontSize: '12px', color: '#9B9B9B', margin: '0 0 16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          "{trackName}" — <span style={{ color: '#666666' }}>{artistName}</span>
         </p>
 
-        <div className="space-y-2 max-h-60 overflow-y-auto mb-4 divide-y divide-white/5">
+        {/* Decks List */}
+        <div style={{
+          maxHeight: '240px',
+          overflowY: 'auto',
+          marginBottom: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
           {userDecks && userDecks.length > 0 ? (
             userDecks.map((deck) => (
               <button
                 key={deck.id}
                 onClick={() => addTrackToDeck(deck.id, trackId)}
-                className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.06] transition-colors text-left group"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  background: '#1F1F1F',
+                  border: '1px solid #272727',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#272727'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#1F1F1F'}
               >
-                <div className="flex items-center gap-3 min-w-0 pr-2">
-                  <div className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center shrink-0 border border-white/5">
-                    <Disc3 className="w-4 h-4 text-neutral-400 group-hover:text-white" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <div style={{
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '8px',
+                    background: '#272727',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Disc3 size={16} color="#a855f7" />
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium text-neutral-200 group-hover:text-white truncate">
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {deck.name}
                     </div>
-                    <div className="text-[11px] text-neutral-500">
+                    <div style={{ fontSize: '11px', color: '#666666' }}>
                       {deck.track_count || 0} tracks
                     </div>
                   </div>
                 </div>
-                <div className="p-1 rounded-full bg-white/5 group-hover:bg-white text-neutral-400 group-hover:text-black transition-colors shrink-0">
-                  <Plus className="w-3.5 h-3.5" />
+
+                <div style={{
+                  padding: '6px',
+                  borderRadius: '6px',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Plus size={13} />
                 </div>
               </button>
             ))
           ) : (
-            <div className="py-6 text-center text-xs text-neutral-500">
-              No decks created yet.
+            <div style={{ textAlign: 'center', padding: '24px 12px', color: '#666666', fontSize: '13px' }}>
+              No custom decks created yet.
             </div>
           )}
         </div>
 
+        {/* Create Deck Shortcut */}
         <button
           onClick={() => {
             setIsAddToDeckOpen(false);
             setIsDeckModalOpen(true);
           }}
-          className="w-full py-2.5 rounded-xl border border-dashed border-white/15 hover:border-white/30 text-xs font-medium text-neutral-300 hover:text-white flex items-center justify-center gap-1.5 transition-colors"
+          style={{
+            width: '100%',
+            padding: '11px',
+            borderRadius: '12px',
+            border: '1px dashed #383838',
+            background: 'transparent',
+            color: '#FFFFFF',
+            fontSize: '12px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            transition: 'border-color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#FFFFFF'}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = '#383838'}
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus size={14} />
           <span>Create New Deck</span>
         </button>
       </div>

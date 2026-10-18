@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export default function AIAnswerModal() {
@@ -11,41 +11,102 @@ export default function AIAnswerModal() {
   const stats = aiAnswer.stats;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-[#141414] border border-white/10 rounded-3xl p-6 shadow-[0_25px_60px_rgba(0,0,0,0.8)]">
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 200,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      background: 'rgba(0, 0, 0, 0.8)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: '480px',
+        background: '#181818',
+        border: '1px solid #272727',
+        borderRadius: '24px',
+        padding: '28px',
+        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.95)'
+      }}>
+        {/* Close Button */}
         <button
           onClick={() => setAiAnswer(null)}
-          className="absolute top-5 right-5 p-1 text-neutral-400 hover:text-white transition-colors"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'none',
+            border: 'none',
+            color: '#9B9B9B',
+            cursor: 'pointer',
+            padding: '4px'
+          }}
         >
-          <X className="w-5 h-5" />
+          <X size={18} />
         </button>
 
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="p-2 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-300">
-            <Sparkles className="w-4 h-4 text-purple-400" />
+        {/* Modal Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '12px',
+            background: 'rgba(168, 85, 247, 0.2)',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Sparkles size={18} color="#c084fc" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">AI Music Intelligence</h3>
-            <p className="text-[11px] text-neutral-400">Personalized Streaming & Taste Analytics</p>
+            <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#FFFFFF', margin: 0 }}>AI Music Intelligence</h3>
+            <p style={{ fontSize: '12px', color: '#9B9B9B', margin: '2px 0 0' }}>Personalized Streaming & Taste Analytics</p>
           </div>
         </div>
 
-        {/* Message */}
-        <div className="text-sm text-neutral-200 leading-relaxed mb-5 bg-neutral-900/60 p-4 rounded-2xl border border-white/5 font-normal">
+        {/* Conversational Message Box */}
+        <div style={{
+          background: '#1F1F1F',
+          border: '1px solid #272727',
+          borderRadius: '16px',
+          padding: '16px',
+          fontSize: '14px',
+          color: '#FFFFFF',
+          lineHeight: '22px',
+          marginBottom: '18px'
+        }}>
           {aiAnswer.message.split('**').map((part, idx) =>
-            idx % 2 === 1 ? <strong key={idx} className="font-semibold text-white">{part}</strong> : part
+            idx % 2 === 1 ? <strong key={idx} style={{ color: '#c084fc', fontWeight: '700' }}>{part}</strong> : part
           )}
         </div>
 
-        {/* Library Stats Badges if present */}
+        {/* Statistics & Badges */}
         {isLibraryAnswer && stats && (
-          <div className="space-y-3 mb-5">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
             {stats.top_artists && stats.top_artists.length > 0 && (
               <div>
-                <div className="text-[11px] font-mono text-neutral-400 mb-1.5 uppercase tracking-wider">Top Artists In Library</div>
-                <div className="flex flex-wrap gap-1.5">
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: '#666666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                  Top Artists In Rotation
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {stats.top_artists.slice(0, 6).map((art, i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-800/80 border border-white/5 text-xs text-neutral-300">
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '9999px',
+                        background: '#272727',
+                        border: '1px solid #313131',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        color: '#FFFFFF'
+                      }}
+                    >
                       {art}
                     </span>
                   ))}
@@ -55,10 +116,22 @@ export default function AIAnswerModal() {
 
             {stats.top_genres && stats.top_genres.length > 0 && (
               <div>
-                <div className="text-[11px] font-mono text-neutral-400 mb-1.5 uppercase tracking-wider">Core Genres</div>
-                <div className="flex flex-wrap gap-1.5">
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: '#666666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+                  Dominant Genres
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {stats.top_genres.map((g, i) => (
-                    <span key={i} className="px-2.5 py-1 rounded-full bg-neutral-800/40 border border-white/5 text-xs text-neutral-400">
+                    <span
+                      key={i}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '9999px',
+                        background: '#1F1F1F',
+                        border: '1px solid #272727',
+                        fontSize: '11px',
+                        color: '#9B9B9B'
+                      }}
+                    >
                       {g}
                     </span>
                   ))}
@@ -68,21 +141,42 @@ export default function AIAnswerModal() {
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+        {/* Bottom Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', paddingTop: '12px', borderTop: '1px solid #272727' }}>
           {aiAnswer.canSave && (
             <button
               onClick={() => {
                 saveCurrentCardsAsDeck(activeDeckTitle || 'AI Curated Deck');
                 setAiAnswer(null);
               }}
-              className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+              style={{
+                padding: '9px 18px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.4) 0%, rgba(6, 182, 212, 0.4) 100%)',
+                border: '1px solid rgba(168, 85, 247, 0.6)',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 0 16px rgba(168, 85, 247, 0.3)'
+              }}
             >
               Save as Custom Deck
             </button>
           )}
+
           <button
             onClick={() => setAiAnswer(null)}
-            className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-300 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+            style={{
+              padding: '9px 20px',
+              borderRadius: '12px',
+              background: '#FFFFFF',
+              color: '#000000',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
           >
             Got it
           </button>

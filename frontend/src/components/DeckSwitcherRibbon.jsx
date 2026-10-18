@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Plus, Search, Bookmark, X, Disc3 } from 'lucide-react';
+import { Sparkles, Plus, Search, X, Disc3 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export default function DeckSwitcherRibbon() {
@@ -11,29 +11,50 @@ export default function DeckSwitcherRibbon() {
     searchBanner,
     clearSearchBanner,
     setIsDeckModalOpen,
-    saveCurrentCardsAsDeck,
-    statusMessage
+    saveCurrentCardsAsDeck
   } = useStore();
 
   const isSearchActive = activeDeckId?.startsWith('search_') || activeDeckId?.startsWith('search:');
   const isAiActive = activeDeckId?.startsWith('ai_') || activeDeckId?.startsWith('vibe:');
 
   return (
-    <div className="w-full max-w-2xl mx-auto mb-4">
+    <div style={{ width: '100%', marginBottom: '20px' }}>
       {/* Search / AI Explanation Banner if active */}
       {searchBanner && (
-        <div className="mb-3 px-4 py-2.5 rounded-2xl bg-neutral-900/80 border border-white/10 backdrop-blur-xl flex items-center justify-between text-xs text-neutral-300 animate-in fade-in duration-300">
-          <div className="flex items-center gap-2.5 min-w-0 pr-3">
-            <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-            <div className="truncate">
-              <span className="font-semibold text-white mr-1.5">{searchBanner.title}:</span>
-              <span className="text-neutral-400">{searchBanner.explanation}</span>
+        <div style={{
+          marginBottom: '14px',
+          padding: '12px 18px',
+          borderRadius: '16px',
+          background: '#1F1F1F',
+          border: '1px solid #313131',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '13px',
+          color: '#FFFFFF',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, paddingRight: '12px' }}>
+            <Sparkles size={16} color="#c084fc" style={{ flexShrink: 0 }} />
+            <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontWeight: '700', color: '#FFFFFF', marginRight: '6px' }}>{searchBanner.title}:</span>
+              <span style={{ color: '#9B9B9B' }}>{searchBanner.explanation}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               onClick={() => saveCurrentCardsAsDeck(searchBanner.title)}
-              className="px-2.5 py-1 rounded-full bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/30 text-purple-200 hover:text-white text-[11px] font-medium transition-colors"
+              style={{
+                padding: '6px 14px',
+                borderRadius: '9999px',
+                background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, rgba(6, 182, 212, 0.3) 100%)',
+                border: '1px solid rgba(168, 85, 247, 0.5)',
+                color: '#FFFFFF',
+                fontSize: '11.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
             >
               Save as Deck
             </button>
@@ -42,81 +63,176 @@ export default function DeckSwitcherRibbon() {
                 clearSearchBanner();
                 selectDeck('for_you', 'For You');
               }}
-              className="p-1 text-neutral-400 hover:text-white transition-colors"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#9B9B9B',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
               title="Return to For You"
             >
-              <X className="w-3.5 h-3.5" />
+              <X size={15} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Pill Switcher */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+      {/* Ribbon Pills */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        overflowX: 'auto',
+        padding: '2px 0 6px',
+        scrollbarWidth: 'none'
+      }}>
         {/* For You Default Deck */}
         <button
           onClick={() => selectDeck('for_you', 'For You')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium shrink-0 transition-all duration-200 ${
-            activeDeckId === 'for_you'
-              ? 'bg-white text-black shadow-[0_0_15px_rgba(255,255,255,0.25)] font-semibold'
-              : 'bg-neutral-900/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-white/5'
-          }`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 16px',
+            borderRadius: '9999px',
+            fontSize: '12px',
+            fontWeight: activeDeckId === 'for_you' ? '700' : '500',
+            cursor: 'pointer',
+            flexShrink: 0,
+            background: activeDeckId === 'for_you' ? '#FFFFFF' : '#1F1F1F',
+            color: activeDeckId === 'for_you' ? '#000000' : '#9B9B9B',
+            border: activeDeckId === 'for_you' ? '1px solid #FFFFFF' : '1px solid #272727',
+            boxShadow: activeDeckId === 'for_you' ? '0 0 16px rgba(255, 255, 255, 0.3)' : 'none',
+            transition: 'all 0.2s cubic-bezier(0.32, 0.72, 0, 1)'
+          }}
         >
-          <Sparkles className={`w-3.5 h-3.5 ${activeDeckId === 'for_you' ? 'text-black' : 'text-neutral-400'}`} />
+          <Sparkles size={13} color={activeDeckId === 'for_you' ? '#000000' : '#a855f7'} />
           <span>For You</span>
         </button>
 
         {/* Temporary Search Deck Pill if Active */}
         {isSearchActive && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shrink-0 bg-blue-950/60 border border-blue-500/40 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.2)]">
-            <Search className="w-3.5 h-3.5 text-blue-400" />
-            <span className="max-w-[130px] truncate">{activeDeckTitle}</span>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            borderRadius: '9999px',
+            fontSize: '12px',
+            fontWeight: '600',
+            flexShrink: 0,
+            background: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.4)',
+            color: '#93c5fd',
+            boxShadow: '0 0 14px rgba(59, 130, 246, 0.2)'
+          }}>
+            <Search size={13} color="#60a5fa" />
+            <span style={{ maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {activeDeckTitle}
+            </span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 selectDeck('for_you', 'For You');
               }}
-              className="ml-1 p-0.5 hover:text-white transition-colors"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#93c5fd',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px',
+                marginLeft: '2px'
+              }}
             >
-              <X className="w-3 h-3" />
+              <X size={12} />
             </button>
           </div>
         )}
 
-        {/* Temporary AI Deck Pill if Active */}
+        {/* Temporary AI Vibe Deck Pill if Active */}
         {isAiActive && !isSearchActive && (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium shrink-0 bg-purple-950/60 border border-purple-500/40 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.2)]">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span className="max-w-[130px] truncate">{activeDeckTitle}</span>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            borderRadius: '9999px',
+            fontSize: '12px',
+            fontWeight: '600',
+            flexShrink: 0,
+            background: 'rgba(168, 85, 247, 0.15)',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            color: '#e9d5ff',
+            boxShadow: '0 0 14px rgba(168, 85, 247, 0.2)'
+          }}>
+            <Sparkles size={13} color="#c084fc" />
+            <span style={{ maxWidth: '140px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {activeDeckTitle}
+            </span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 selectDeck('for_you', 'For You');
               }}
-              className="ml-1 p-0.5 hover:text-white transition-colors"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#e9d5ff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px',
+                marginLeft: '2px'
+              }}
             >
-              <X className="w-3 h-3" />
+              <X size={12} />
             </button>
           </div>
         )}
 
-        {/* User-Created Decks */}
+        {/* User-Created Saved Decks */}
         {userDecks && userDecks.map((deck) => {
           const isActive = activeDeckId === deck.id;
           return (
             <button
               key={deck.id}
               onClick={() => selectDeck(deck.id, deck.name)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium shrink-0 transition-all duration-200 ${
-                isActive
-                  ? 'bg-neutral-200 text-black shadow-[0_0_15px_rgba(255,255,255,0.2)] font-semibold'
-                  : 'bg-neutral-900/60 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-white/5'
-              }`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 16px',
+                borderRadius: '9999px',
+                fontSize: '12px',
+                fontWeight: isActive ? '700' : '500',
+                cursor: 'pointer',
+                flexShrink: 0,
+                background: isActive ? '#FFFFFF' : '#1F1F1F',
+                color: isActive ? '#000000' : '#9B9B9B',
+                border: isActive ? '1px solid #FFFFFF' : '1px solid #272727',
+                boxShadow: isActive ? '0 0 16px rgba(255, 255, 255, 0.3)' : 'none',
+                transition: 'all 0.2s cubic-bezier(0.32, 0.72, 0, 1)'
+              }}
             >
-              <Disc3 className={`w-3.5 h-3.5 ${isActive ? 'text-black' : 'text-neutral-500'}`} />
-              <span className="max-w-[140px] truncate">{deck.name}</span>
+              <Disc3 size={13} color={isActive ? '#000000' : '#9B9B9B'} />
+              <span style={{ maxWidth: '130px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {deck.name}
+              </span>
               {deck.track_count !== undefined && (
-                <span className={`text-[10px] ml-0.5 ${isActive ? 'text-neutral-600' : 'text-neutral-500'}`}>
+                <span style={{
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  background: isActive ? '#E5E5E5' : '#272727',
+                  color: isActive ? '#000000' : '#666666'
+                }}>
                   {deck.track_count}
                 </span>
               )}
@@ -124,12 +240,34 @@ export default function DeckSwitcherRibbon() {
           );
         })}
 
-        {/* Create Deck Button */}
+        {/* New Deck Action Button */}
         <button
           onClick={() => setIsDeckModalOpen(true)}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium shrink-0 bg-neutral-900/40 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-dashed border-white/10 hover:border-white/30 transition-all"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '7px 14px',
+            borderRadius: '9999px',
+            fontSize: '12px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            flexShrink: 0,
+            background: 'transparent',
+            color: '#9B9B9B',
+            border: '1px dashed #383838',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#FFFFFF';
+            e.currentTarget.style.color = '#FFFFFF';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#383838';
+            e.currentTarget.style.color = '#9B9B9B';
+          }}
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus size={13} />
           <span>New Deck</span>
         </button>
       </div>
