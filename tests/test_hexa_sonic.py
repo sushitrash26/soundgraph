@@ -9,6 +9,8 @@ from backend.core.hexa_sonic.stream_b_melody import StreamBMelody, subsequence_d
 from backend.core.hexa_sonic.stream_c_lyrics import StreamCLyrics
 from backend.core.hexa_sonic.canonical_store import CanonicalStore
 from backend.core.hexa_sonic.arbiter import ChimericArbiter
+from backend.core.hexa_sonic.vocal_transcriber import VocalTranscriber
+from backend.core.hexa_sonic.melody_embedding import MelodyEmbeddingExtractor
 
 def test_speaker_reverb_and_nightcore():
     """
@@ -142,3 +144,43 @@ def test_canonical_deduplication():
 
     assert s_master > s_cover, f"Master score {s_master:.3f} must beat cover score {s_cover:.3f}"
     assert (s_master - s_cover) > 0.05, "Distinctiveness boost should be > 5%"
+
+def test_vocal_transcriber_fuzzy_catalog_search():
+    """
+    Assertion 6: When human sings partial or mumbled lyrics (e.g. 'I am a star boy Daft Punk'),
+    VocalTranscriber fuzzy matching must lock onto Starboy in < 50ms.
+    """
+    t0 = time.time()
+    candidates = VocalTranscriber.match_singing_to_catalog("i am a star boy daft punk look what you have done")
+    elapsed = time.time() - t0
+
+    assert len(candidates) > 0, "VocalTranscriber must return matches for star boy"
+    top = candidates[0]
+    assert "starboy" in top["title"].lower(), f"Expected Starboy, got {top['title']}"
+    assert top["confidence"] >= 0.70, f"Confidence {top['confidence']} should be >= 0.70"
+    assert elapsed < 0.15, f"Vocal catalog search took {elapsed:.3f}s (must be < 150ms)"
+
+def test_melody_embedding_extractor():
+    """
+    Assertion 7: Google-style End-to-End Mel-Spectrogram 128-D embedding extraction.
+    Must generate a unit-normalized (L2 = 1.0) 128-D vector in < 50ms.
+    """
+    # Synthesize a 3-second hummed melody waveform
+    sr = 16000
+    t = np.linspace(0, 3.0, int(sr * 3.0), endpoint=False)
+    # Sine wave melody stepping through 3 notes (A3=220Hz, C4=261Hz, E4=330Hz)
+    hum_audio = np.zeros_like(t, dtype=np.float32)
+    hum_audio[:sr] = np.sin(2 * np.pi * 220.0 * t[:sr])
+    hum_audio[sr:2*sr] = np.sin(2 * np.pi * 261.6 * t[sr:2*sr])
+    hum_audio[2*sr:] = np.sin(2 * np.pi * 329.6 * t[2*sr:])
+
+    t0 = time.time()
+    emb = MelodyEmbeddingExtractor.extract_embedding(hum_audio, sample_rate=sr)
+    elapsed = time.time() - t0
+
+    assert emb is not None, "Embedding must not be None"
+    assert len(emb) == 128, f"Expected 128 dimensions, got {len(emb)}"
+    norm = np.linalg.norm(emb)
+    assert abs(norm - 1.0) < 1e-4, f"Embedding must be L2 normalized (got {norm})"
+    assert elapsed < 0.08, f"Melody embedding extraction took {elapsed:.3f}s (must be < 80ms)"
+

@@ -11,6 +11,7 @@ from backend.core.hexa_sonic.stream_a_constellation import StreamAConstellation
 from backend.core.hexa_sonic.stream_b_melody import StreamBMelody
 from backend.core.hexa_sonic.stream_c_lyrics import StreamCLyrics
 from backend.core.hexa_sonic.canonical_store import CanonicalStore
+from backend.core.hexa_sonic.melody_embedding import MelodyEmbeddingExtractor
 
 class JITHydrationWorker:
     """
@@ -189,11 +190,15 @@ class JITHydrationWorker:
         peaks = StreamAConstellation.extract_peaks(bus1)
         hashes = StreamAConstellation.generate_triplet_hashes(peaks)
 
-        # 3. Extract Stream B Pitch Contour, Note Events, Δp, r_IOI, and 128-D Vector
+        # 3. Extract Stream B Pitch Contour, Note Events, Δp, r_IOI, and Mel-Spectrogram Embedding
         f0, voiced_probs, times = StreamBMelody.extract_pitch_contour(bus2)
         note_events = StreamBMelody.segment_note_events(f0, voiced_probs, times)
         dp, r_ioi = StreamBMelody.compute_deltas_and_iois(note_events)
-        coarse_vec = StreamBMelody.compute_128d_coarse_embedding(dp, r_ioi)
+        
+        # Prefer direct 128-D mel-spectrogram embedding (Google-style)
+        coarse_vec = MelodyEmbeddingExtractor.extract_embedding(pcm_norm)
+        if coarse_vec is None:
+            coarse_vec = StreamBMelody.compute_128d_coarse_embedding(dp, r_ioi)
 
         # 4. Stream C Phonetic Skeleton
         skel = StreamCLyrics.compute_consonant_vowel_skeleton(lyrics) if lyrics else ""

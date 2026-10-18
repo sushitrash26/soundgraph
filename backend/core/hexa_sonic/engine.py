@@ -20,6 +20,8 @@ from backend.core.hexa_sonic.canonical_store import CanonicalStore
 from backend.core.hexa_sonic.jit_hydration import JITHydrationWorker
 from backend.core.hexa_sonic.arbiter import ChimericArbiter
 from backend.core.shazam_recognizer import ShazamRecognizer
+from backend.core.hexa_sonic.vocal_transcriber import VocalTranscriber
+from backend.core.hexa_sonic.melody_embedding import MelodyEmbeddingExtractor
 
 class HexaSonicEngine:
     """
@@ -188,12 +190,58 @@ class HexaSonicEngine:
 
             m_candidates.sort(key=lambda x: x["score"], reverse=True)
 
+        # 3.5: Google-Style End-to-End Mel-Spectrogram Embedding Matching
+        try:
+            q_mel_vec = MelodyEmbeddingExtractor.extract_embedding(pcm_norm)
+            if q_mel_vec is not None:
+                mel_hits = MelodyEmbeddingExtractor.match_humming(q_mel_vec, top_k=10)
+                for hit in mel_hits:
+                    rec_info = CanonicalStore.get_recording_info(hit["track_id"])
+                    if rec_info and not any(m["track_id"] == hit["track_id"] for m in m_candidates):
+                        m_candidates.append({
+                            "track_id": hit["track_id"],
+                            "work_id": rec_info.get("work_id"),
+                            "title": rec_info.get("title"),
+                            "artist": rec_info.get("artist"),
+                            "youtube_url": rec_info.get("youtube_url"),
+                            "thumbnail": rec_info.get("thumbnail"),
+                            "score": hit["confidence"],
+                            "canonical_recording": rec_info
+                        })
+        except Exception as e:
+            logger.debug(f"HexaSonic: MelodyEmbedding error: {e}")
+
         # -------------------------------------------------------------
-        # STEP 4: STREAM C — Phonetic & Vowel-Skeleton Lyric Extraction
+        # STEP 4: STREAM C — Phonetic & Local Faster-Whisper Lyric Extraction
         # -------------------------------------------------------------
         transcribed_text = text_hint or ""
         detected_title = None
         detected_artist = None
+        phonetic_data: Dict[str, Any] = {}
+        l_candidates: List[Dict[str, Any]] = []
+
+        # 1. Local Faster-Whisper vocal transcriber (100% free, CPU int8, ~120ms)
+        try:
+            vocal_res = VocalTranscriber.transcribe(pcm_norm)
+            if vocal_res and vocal_res.get("has_vocals") and vocal_res.get("text"):
+                transcribed_text = vocal_res["text"]
+                logger.info(f"HexaSonic: Local Faster-Whisper detected sung lyrics: '{transcribed_text}'")
+                local_vocal_hits = VocalTranscriber.match_singing_to_catalog(transcribed_text)
+                for v_hit in local_vocal_hits:
+                    rec_info = CanonicalStore.get_recording_info(v_hit["track_id"])
+                    if rec_info and not any(l["track_id"] == v_hit["track_id"] for l in l_candidates):
+                        l_candidates.append({
+                            "track_id": v_hit["track_id"],
+                            "work_id": rec_info.get("work_id"),
+                            "title": rec_info.get("title"),
+                            "artist": rec_info.get("artist"),
+                            "youtube_url": rec_info.get("youtube_url"),
+                            "thumbnail": rec_info.get("thumbnail"),
+                            "score": v_hit["confidence"],
+                            "canonical_recording": rec_info
+                        })
+        except Exception as e:
+            logger.debug(f"HexaSonic: VocalTranscriber error: {e}")
 
         if settings.GEMINI_API_KEY:
             phonetic_data = await cls._transcribe_phonetics(audio_bytes, mime_type)
@@ -210,14 +258,12 @@ class HexaSonicEngine:
         else:
             c_lexical = StreamCLyrics.compute_lexical_diversity_gate(transcribed_text)
 
-        l_candidates: List[Dict[str, Any]] = []
-
         if c_lexical > 0.20 and transcribed_text:
             all_lyrics = CanonicalStore.get_all_lyrics()
             lyric_hits = StreamCLyrics.match_lyrics_against_index(transcribed_text, all_lyrics)
             for hit in lyric_hits:
                 rec_info = CanonicalStore.get_recording_info(hit["track_id"])
-                if rec_info:
+                if rec_info and not any(l["track_id"] == hit["track_id"] for l in l_candidates):
                     l_candidates.append({
                         "track_id": hit["track_id"],
                         "work_id": rec_info.get("work_id"),

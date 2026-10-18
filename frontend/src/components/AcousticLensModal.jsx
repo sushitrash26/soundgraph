@@ -16,6 +16,7 @@ import {
   Volume2
 } from 'lucide-react';
 import axios from 'axios';
+import { API_BASE } from '../api/config';
 
 const YouTubeIcon = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF0000">
@@ -116,21 +117,21 @@ export default function AcousticLensModal({ isOpen, onClose }) {
     }
   }, [isRecording]);
 
-  // Real-time rolling background probe: checks at ~6s, 12s, 18s, 24s
+  // Real-time rolling background probe: checks at 3s, 5s, 7s, 9s, 12s, 15s for early lock-on
   useEffect(() => {
     if (!isRecording) return;
 
     const currentSec = Math.floor(recordingDuration);
-    const probeCheckpoints = [6, 12, 18, 24];
+    const probeCheckpoints = [3, 5, 7, 9, 12, 15];
 
     if (
       probeCheckpoints.includes(currentSec) &&
-      (currentSec - lastProbeTimeRef.current) >= 5 &&
+      (currentSec - lastProbeTimeRef.current) >= 2 &&
       !probeActiveRef.current
     ) {
       lastProbeTimeRef.current = currentSec;
       const snapshot = getSnapshotBlob();
-      if (snapshot && snapshot.size > 20000) {
+      if (snapshot && snapshot.size > 15000) {
         probeActiveRef.current = true;
         const formData = new FormData();
         const extension = snapshot.type.includes('webm') ? 'webm' : 'wav';
@@ -138,9 +139,9 @@ export default function AcousticLensModal({ isOpen, onClose }) {
         if (user?.id) formData.append('user_id', user.id);
         if (hint.trim()) formData.append('hint', hint.trim());
 
-        axios.post('http://localhost:8001/vibe/identify-audio', formData)
+        axios.post(`${API_BASE}/vibe/identify-audio`, formData)
           .then((res) => {
-            if (res.data && res.data.status === 'success' && res.data.confidence >= 0.88) {
+            if (res.data && res.data.status === 'success' && res.data.confidence >= 0.70) {
               // Early lock-on achieved!
               stopRecording();
               setResult({
@@ -175,7 +176,7 @@ export default function AcousticLensModal({ isOpen, onClose }) {
           formData.append('hint', hint.trim());
         }
 
-        const res = await axios.post('http://localhost:8001/vibe/identify-audio', formData, {
+        const res = await axios.post(`${API_BASE}/vibe/identify-audio`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
 
