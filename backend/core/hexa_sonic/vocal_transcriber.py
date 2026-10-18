@@ -83,7 +83,7 @@ class VocalTranscriber:
             meaningful_tokens = [w for w in tokens if w not in banned]
 
             has_vocals = len(meaningful_tokens) >= 2 or (len(meaningful_tokens) == 1 and len(meaningful_tokens[0]) >= 5)
-            confidence = float(getattr(info, "transcription_options", {}).get("confidence", 0.85)) if has_vocals else 0.0
+            confidence = 0.85 if has_vocals else 0.0
 
             logger.info(f"VocalTranscriber: Transcribed '{clean_text}' (has_vocals={has_vocals}, tokens={tokens})")
             return {
