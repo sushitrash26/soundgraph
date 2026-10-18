@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, Body, UploadFile, File, Form, HTTPException
+import base64
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from backend.graph.queries import GraphQueries
@@ -32,6 +33,12 @@ class ImageVibeRequest(BaseModel):
     mime_type: str = "image/jpeg"
     text_hint: Optional[str] = None
 
+class AudioVibeRequest(BaseModel):
+    user_id: Optional[str] = None
+    audio_base64: str
+    mime_type: Optional[str] = "audio/m4a"
+    hint: Optional[str] = None
+
 class DwellTelemetryRequest(BaseModel):
     user_id: Optional[str] = None
     track_id: str
@@ -62,6 +69,7 @@ def get_recommendations(
     )
 
 @router.post("/recommendations/feedback")
+@router.post("/feedback")
 def record_feedback(payload: FeedbackRequest):
     uid = resolve_uid(payload.user_id)
     return GraphQueries.record_feedback(
@@ -137,6 +145,20 @@ async def identify_audio_snippet(
         mime_type=mime_type,
         user_id=uid,
         text_hint=hint
+    )
+
+@router.post("/vibe/identify-audio-base64")
+async def identify_audio_base64(payload: AudioVibeRequest):
+    uid = resolve_uid(payload.user_id)
+    try:
+        audio_bytes = base64.b64decode(payload.audio_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 audio data: {e}")
+    return await AcousticLensService.identify_audio(
+        audio_bytes=audio_bytes,
+        mime_type=payload.mime_type or "audio/m4a",
+        user_id=uid,
+        text_hint=payload.hint
     )
 
 @router.get("/vibe/suggestions")

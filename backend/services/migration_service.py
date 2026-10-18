@@ -90,12 +90,12 @@ class MigrationService:
                 MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)
                 WHERE t.source = 'youtube' OR t.id STARTS WITH 'youtube:'
                 OPTIONAL MATCH (t)-[:BY]->(a:Artist)
-                WITH t, r, collect(DISTINCT a.name) AS artists
+                WITH t, coalesce(r.play_count, 1) AS play_count, collect(DISTINCT a.name) AS artists
                 RETURN t.id AS id, t.name AS name,
                        artists,
                        coalesce(t.cover_url, '') AS cover_url,
                        coalesce(t.duration_ms, 210000) AS duration_ms
-                ORDER BY coalesce(r.play_count, 1) DESC
+                ORDER BY play_count DESC
                 LIMIT 100
                 """
                 yt_rows = neo4j_conn.query(yt_tracks_q, {"user_id": user_id})
@@ -158,11 +158,12 @@ class MigrationService:
                 MATCH (u:User {id: $user_id})-[r:LISTENED_TO]->(t:Track)
                 WHERE t.source = 'spotify' OR t.id STARTS WITH 'spotify:'
                 OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+                WITH t, coalesce(r.play_count, 1) AS play_count, collect(DISTINCT a.name) AS artists
                 RETURN t.id AS id, t.name AS name,
-                       collect(DISTINCT a.name) AS artists,
+                       artists,
                        coalesce(t.cover_url, '') AS cover_url,
                        coalesce(t.duration_ms, 210000) AS duration_ms
-                ORDER BY coalesce(r.play_count, 1) DESC
+                ORDER BY play_count DESC
                 LIMIT 100
                 """
                 sp_rows = neo4j_conn.query(sp_tracks_q, {"user_id": user_id})
