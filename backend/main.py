@@ -14,6 +14,7 @@ from backend.api.routes.graph import router as graph_router
 from backend.api.routes.search import router as search_router
 from backend.api.routes.deck import router as deck_router
 from backend.api.routes.migration import router as migration_router
+from backend.api.routes.onboarding import router as onboarding_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,17 +36,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration for React frontend
+# CORS configuration for React frontend & Expo mobile app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        settings.FRONTEND_URL,
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,6 +53,7 @@ app.include_router(graph_router)
 app.include_router(search_router)
 app.include_router(deck_router)
 app.include_router(migration_router)
+app.include_router(onboarding_router)
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):

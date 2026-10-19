@@ -24,7 +24,7 @@ class GoogleYouTubeIngestor(BaseIngestor):
         self.access_token = access_token
 
     @classmethod
-    def get_auth_url(cls, redirect_uri: Optional[str] = None) -> str:
+    def get_auth_url(cls, redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
         target_redirect = redirect_uri or getattr(settings, "GOOGLE_REDIRECT_URI", f"http://127.0.0.1:{settings.API_PORT}/auth/google/callback")
         params = {
             "client_id": getattr(settings, "GOOGLE_CLIENT_ID", ""),
@@ -34,6 +34,8 @@ class GoogleYouTubeIngestor(BaseIngestor):
             "access_type": "offline",
             "prompt": "consent",
         }
+        if state:
+            params["state"] = urllib.parse.quote(state, safe="")
         query_string = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{GOOGLE_AUTH_URL}?{query_string}"
 
