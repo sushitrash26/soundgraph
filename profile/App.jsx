@@ -99,7 +99,7 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function App() {
+function ProfileScreen({ onBack }: { onBack: () => void }) {
   const [period, setPeriod] = useState<"month" | "year">("month");
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -111,7 +111,7 @@ export default function App() {
       <div className="noise-layer" aria-hidden="true" />
       <main className="relative z-10 mx-auto min-h-screen max-w-md overflow-hidden pb-28">
         <header className="flex items-center justify-between px-5 pb-4 pt-6">
-          <button className="glass-control grid size-11 place-items-center rounded-full transition hover:-translate-y-0.5" aria-label="Go back">
+          <button onClick={onBack} className="glass-control grid size-11 place-items-center rounded-full transition hover:-translate-y-0.5" aria-label="Go back">
             <Icon name="arrow" />
           </button>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/45">Your profile</p>
@@ -288,5 +288,146 @@ export default function App() {
 
       {shareOpen && <ShareSheet onClose={() => setShareOpen(false)} />}
     </div>
+  );
+}
+
+function PlatformMark({ platform }: { platform: "spotify" | "youtube" }) {
+  if (platform === "spotify") {
+    return (
+      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#1ed760] text-black shadow-[0_8px_24px_rgba(30,215,96,.2)]">
+        <svg className="size-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.58 14.43a.62.62 0 0 1-.85.2c-2.33-1.43-5.27-1.75-8.73-.96a.62.62 0 1 1-.28-1.2c3.8-.87 7.07-.5 9.66 1.08.3.18.4.57.2.88Zm1.22-2.7a.78.78 0 0 1-1.07.25c-2.67-1.64-6.74-2.11-9.9-1.16a.78.78 0 0 1-.45-1.49c3.61-1.09 8.1-.56 11.17 1.33.37.22.48.7.25 1.07Zm.1-2.81C14.7 9.02 9.4 8.85 6.35 9.77a.93.93 0 1 1-.54-1.78c3.5-1.06 9.37-.85 13.04 1.33a.93.93 0 0 1-.95 1.6Z" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#ff0033] text-white shadow-[0_8px_24px_rgba(255,0,51,.2)]">
+      <svg className="ml-0.5 size-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M21.58 7.19a2.76 2.76 0 0 0-1.94-1.95C17.93 4.78 12 4.78 12 4.78s-5.93 0-7.64.46a2.76 2.76 0 0 0-1.94 1.95A28.7 28.7 0 0 0 1.96 12c0 1.63.16 3.25.46 4.81a2.76 2.76 0 0 0 1.94 1.95c1.71.46 7.64.46 7.64.46s5.93 0 7.64-.46a2.76 2.76 0 0 0 1.94-1.95c.3-1.56.46-3.18.46-4.81s-.16-3.25-.46-4.81ZM10 15.1V8.9l5.2 3.1-5.2 3.1Z" />
+      </svg>
+    </span>
+  );
+}
+
+function LandingScreen({ onConnect }: { onConnect: () => void }) {
+  const [connecting, setConnecting] = useState<"spotify" | "youtube" | null>(null);
+
+  const connect = (platform: "spotify" | "youtube") => {
+    setConnecting(platform);
+    window.setTimeout(onConnect, 650);
+  };
+
+  return (
+    <div className="app-shell landing-shell min-h-screen text-[#f4f3ee] selection:bg-[#d7ff64] selection:text-black">
+      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
+      <div className="ambient-orb ambient-orb-three" aria-hidden="true" />
+      <div className="noise-layer" aria-hidden="true" />
+
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col overflow-hidden px-5 pb-7 pt-6">
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="brand-mark grid size-10 place-items-center rounded-xl text-black">
+              <Icon name="route" className="size-5" />
+            </span>
+            <span className="text-sm font-bold tracking-[-0.02em]">Soundport</span>
+          </div>
+          <span className="glass-control rounded-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
+            Your music, anywhere
+          </span>
+        </header>
+
+        <section className="flex flex-1 flex-col justify-center py-10">
+          <div className="landing-visual relative mx-auto mb-10 h-52 w-full max-w-[350px]" aria-hidden="true">
+            <div className="cover-card cover-card-left">
+              <img src={artists[1].image} alt="" />
+            </div>
+            <div className="cover-card cover-card-center">
+              <img src={artists[0].image} alt="" />
+              <span className="absolute bottom-3 left-3 right-3 rounded-xl border border-white/20 bg-black/25 p-2.5 text-[9px] font-semibold backdrop-blur-xl">
+                Your sound, in one place
+              </span>
+            </div>
+            <div className="cover-card cover-card-right">
+              <img src={artists[2].image} alt="" />
+            </div>
+            <div className="music-orbit music-orbit-one"><span /></div>
+            <div className="music-orbit music-orbit-two"><span /></div>
+          </div>
+
+          <div className="text-center">
+            <p className="eyebrow justify-center">One profile. Every platform.</p>
+            <h1 className="mx-auto mt-3 max-w-[9ch] text-[3.55rem] font-semibold leading-[0.88] tracking-[-0.07em]">
+              Your music has no borders.
+            </h1>
+            <p className="mx-auto mt-5 max-w-[32ch] text-sm leading-relaxed text-white/50">
+              Connect a music account to discover your taste, get better recommendations, and move playlists freely.
+            </p>
+          </div>
+        </section>
+
+        <section className="glass-panel glass-depth rounded-[2rem] p-3">
+          <button
+            onClick={() => connect("spotify")}
+            disabled={connecting !== null}
+            className="connect-button group flex w-full items-center gap-3 rounded-[1.35rem] p-3 text-left"
+          >
+            <PlatformMark platform="spotify" />
+            <span className="flex-1">
+              <span className="block text-sm font-semibold">
+                {connecting === "spotify" ? "Connecting..." : "Continue with Spotify"}
+              </span>
+              <span className="mt-0.5 block text-[10px] text-white/38">Sign in or create an account</span>
+            </span>
+            <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
+              <Icon name="arrow" className="size-4 rotate-180" />
+            </span>
+          </button>
+
+          <div className="my-1 flex items-center gap-3 px-3">
+            <span className="h-px flex-1 bg-white/[0.07]" />
+            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/25">or</span>
+            <span className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          <button
+            onClick={() => connect("youtube")}
+            disabled={connecting !== null}
+            className="connect-button group flex w-full items-center gap-3 rounded-[1.35rem] p-3 text-left"
+          >
+            <PlatformMark platform="youtube" />
+            <span className="flex-1">
+              <span className="block text-sm font-semibold">
+                {connecting === "youtube" ? "Connecting..." : "Continue with YouTube"}
+              </span>
+              <span className="mt-0.5 block text-[10px] text-white/38">Sign in or create an account</span>
+            </span>
+            <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
+              <Icon name="arrow" className="size-4 rotate-180" />
+            </span>
+          </button>
+        </section>
+
+        <div className="mt-5 flex items-center justify-center gap-2 text-center text-[10px] leading-relaxed text-white/30">
+          <svg className="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <rect x="5" y="10" width="14" height="11" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+          We only access the music data you approve.
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  const [screen, setScreen] = useState<"landing" | "profile">("landing");
+
+  return screen === "landing" ? (
+    <LandingScreen onConnect={() => setScreen("profile")} />
+  ) : (
+    <ProfileScreen onBack={() => setScreen("landing")} />
   );
 }

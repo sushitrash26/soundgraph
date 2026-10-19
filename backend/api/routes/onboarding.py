@@ -7,6 +7,7 @@ from backend.core.logger import logger
 from backend.core.neo4j_driver import neo4j_conn
 from backend.core.bandit import ContextualLinUCB
 from backend.core.hexa_sonic.canonical_store import CanonicalStore
+from backend.core.hexa_sonic.jit_hydration import JITHydrationWorker
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
@@ -31,237 +32,71 @@ class FinalizeQuizRequest(BaseModel):
     discovery: Optional[str] = None
     dealbreakers: List[str] = Field(default_factory=list)
 
-# Curated High-Fidelity Universal Anchors by Routine
-CURATED_ANCHOR_POOLS = {
-    "late_night_focus": [
-        {
-            "id": "spotify:track:starboy",
-            "name": "Starboy",
-            "artist": "The Weeknd",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/92/bb/b592bb72-52e3-e756-9b26-9f56d08f47ab/16UMGIM67864.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a",
-            "genres": ["r&b", "electronic", "synthwave"],
-            "energy": 0.82,
-            "valence": 0.68,
-            "reason": "Late-night pulse tailored to your focus zone"
-        },
-        {
-            "id": "hydrated:snooze:sza",
-            "name": "Snooze",
-            "artist": "SZA",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/62/93/13/6293132e-20ff-67ab-3d1f-96bb6797a6ba/196589564955.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b3/9b/ca/b39bca57-2627-1aec-77af-cbf551205394/mzaf_4430383240210492712.plus.aac.p.m4a",
-            "genres": ["r&b", "soul"],
-            "energy": 0.55,
-            "valence": 0.39,
-            "reason": "Intimate vocal atmosphere for deep evening hours"
-        },
-        {
-            "id": "spotify:track:midnight_city",
-            "name": "Midnight City",
-            "artist": "M83",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/cb/7b/a9/cb7ba903-b5f1-cc21-90db-7a81b7aa0997/724596951057.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/24/09/79/2409794c-3d5d-af26-580e-7dc00ee4f207/mzaf_369629549966021675.plus.aac.p.m4a",
-            "genres": ["synthwave", "indie", "electronic"],
-            "energy": 0.78,
-            "valence": 0.55,
-            "reason": "Cinematic midnight synth progression"
-        },
-        {
-            "id": "spotify:track:the_less_i_know",
-            "name": "The Less I Know The Better",
-            "artist": "Tame Impala",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a0/9a/2c/a09a2ca3-a5a6-814b-0af7-640dc0aef0aa/091012682261.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/8b/55/f3/8b55f3a3-3204-8930-f156-82843546950e/mzaf_9370328603131228430.plus.aac.p.m4a",
-            "genres": ["indie rock", "psychedelic"],
-            "energy": 0.74,
-            "valence": 0.78,
-            "reason": "Warm bass groove with smooth nocturnal resonance"
-        },
-        {
-            "id": "hydrated:runaway_(feat._pusha_t):kanye_west_&_pusha_t",
-            "name": "Runaway",
-            "artist": "Kanye West & Pusha T",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Video111/v4/cb/4f/96/cb4f965c-2ef1-e187-69d3-2957a335ad95/dj.korwyeid.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/23/61/64/236164d3-f330-d526-6045-d975a4be4a64/mzaf_17030153012157637966.plus.aac.p.m4a",
-            "genres": ["hip hop", "art rock"],
-            "energy": 0.65,
-            "valence": 0.45,
-            "reason": "Iconic piano dissonance and introspective flow"
-        }
-    ],
-    "workout_energy": [
-        {
-            "id": "youtube:video:harder_better",
-            "name": "Harder, Better, Faster, Stronger",
-            "artist": "Daft Punk",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Features124/v4/ac/e1/07/ace10786-a064-0ed0-17ff-ba0cebecefe9/dj.mpdjtkyu.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3f/4d/c6/3f4dc682-df63-be2c-82e3-e9e96a34a22d/mzaf_3097868572901182119.plus.aac.p.m4a",
-            "genres": ["electronic", "house", "dance"],
-            "energy": 0.90,
-            "valence": 0.71,
-            "reason": "High-octane robotic drive for peak stamina"
-        },
-        {
-            "id": "spotify:track:blinding_lights",
-            "name": "Blinding Lights",
-            "artist": "The Weeknd",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a",
-            "genres": ["synthpop", "pop"],
-            "energy": 0.80,
-            "valence": 0.61,
-            "reason": "171 BPM kinetic adrenaline pump"
-        },
-        {
-            "id": "youtube:video:r_u_mine",
-            "name": "R U Mine?",
-            "artist": "Arctic Monkeys",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/69/9c/b5/699cb5d6-115c-ff73-9d26-e57ea4350d72/887828031795.png/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/6f/80/9f/6f809f2b-b960-90c1-f618-4e1d1fec11fa/mzaf_3957424487272184184.plus.aac.p.m4a",
-            "genres": ["rock", "indie rock"],
-            "energy": 0.88,
-            "valence": 0.52,
-            "reason": "Driving heavy guitar riffs and relentless percussion"
-        },
-        {
-            "id": "hydrated:titanium_(feat._sia):david_guetta",
-            "name": "Titanium (feat. Sia)",
-            "artist": "David Guetta",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/f6/b9/e2/f6b9e2df-c638-3e4b-c28d-a68b06465758/5099997943051.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/fe/ec/07/feec0796-eff9-e6ec-01f3-5f74b66800ce/mzaf_3610002945740549096.plus.aac.p.m4a",
-            "genres": ["dance", "edm", "pop"],
-            "energy": 0.85,
-            "valence": 0.60,
-            "reason": "Power-anthem vocal crescendos"
-        },
-        {
-            "id": "spotify:track:let_it_happen",
-            "name": "Let It Happen",
-            "artist": "Tame Impala",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a8/2e/b4/a82eb490-f30a-a321-461a-0383c88fec95/15UMGIM23316.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/77/68/1f/77681ffc-56e6-813c-e1bc-d94a9b5893c1/mzaf_570579359857462588.plus.aac.p.m4a",
-            "genres": ["psychedelic", "electronic"],
-            "energy": 0.87,
-            "valence": 0.45,
-            "reason": "Dynamic rhythm loop with hypnotic forward momentum"
-        }
-    ],
-    "in_my_feelings": [
-        {
-            "id": "hydrated:looking_for_a_star:xxxtentacion",
-            "name": "Looking for a Star",
-            "artist": "XXXTENTACION",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/13/15/9b/13159bb3-86cb-ebba-35f0-957c3b6b818d/4250282804520.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview122/v4/58/da/39/58da3953-8f0a-24e9-8337-f00056079c6f/mzaf_11163755882316852284.plus.aac.p.m4a",
-            "genres": ["indie", "emo rap"],
-            "energy": 0.62,
-            "valence": 0.38,
-            "reason": "Ethereal melodic longing and acoustic guitar"
-        },
-        {
-            "id": "spotify:track:do_i_wanna_know",
-            "name": "Do I Wanna Know?",
-            "artist": "Arctic Monkeys",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/69/9c/b5/699cb5d6-115c-ff73-9d26-e57ea4350d72/887828031795.png/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/71/cb/ba/71cbbaa1-016b-0e73-dfc2-9f4ede9ddfc0/mzaf_16266777024198047150.plus.aac.p.m4a",
-            "genres": ["indie rock"],
-            "energy": 0.56,
-            "valence": 0.41,
-            "reason": "Late-night yearning and slow-burn guitar"
-        },
-        {
-            "id": "hydrated:snooze:sza",
-            "name": "Snooze",
-            "artist": "SZA",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/62/93/13/6293132e-20ff-67ab-3d1f-96bb6797a6ba/196589564955.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b3/9b/ca/b39bca57-2627-1aec-77af-cbf551205394/mzaf_4430383240210492712.plus.aac.p.m4a",
-            "genres": ["r&b", "soul"],
-            "energy": 0.55,
-            "valence": 0.39,
-            "reason": "Velvet vocal intimacy and vulnerability"
-        },
-        {
-            "id": "spotify:track:instant_crush",
-            "name": "Instant Crush",
-            "artist": "Daft Punk ft. Julian Casablancas",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/e8435ffa-b6b9-b171-40ab-4ff3959ab661/886443919266.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/dc/1e/c2/dc1ec21b-96a0-470c-ee89-2b09346fa847/mzaf_7827098614541126525.plus.aac.p.m4a",
-            "genres": ["synthpop", "indie"],
-            "energy": 0.76,
-            "valence": 0.58,
-            "reason": "Bittersweet vocoder harmonies"
-        },
-        {
-            "id": "hydrated:runaway_(feat._pusha_t):kanye_west_&_pusha_t",
-            "name": "Runaway",
-            "artist": "Kanye West & Pusha T",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Video111/v4/cb/4f/96/cb4f965c-2ef1-e187-69d3-2957a335ad95/dj.korwyeid.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/23/61/64/236164d3-f330-d526-6045-d975a4be4a64/mzaf_17030153012157637966.plus.aac.p.m4a",
-            "genres": ["hip hop"],
-            "energy": 0.65,
-            "valence": 0.45,
-            "reason": "Raw emotional piano minimalism"
-        }
-    ],
-    "good_vibes": [
-        {
-            "id": "youtube:video:get_lucky",
-            "name": "Get Lucky",
-            "artist": "Daft Punk & Pharrell Williams",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/e8435ffa-b6b9-b171-40ab-4ff3959ab661/886443919266.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/57/a5/85/57a585aa-f1bc-7619-881b-f8a04a5541d5/mzaf_6906185026678279401.plus.aac.p.m4a",
-            "genres": ["disco", "funk", "pop"],
-            "energy": 0.81,
-            "valence": 0.86,
-            "reason": "Sun-drenched funk rhythm and contagious optimism"
-        },
-        {
-            "id": "spotify:track:the_less_i_know",
-            "name": "The Less I Know The Better",
-            "artist": "Tame Impala",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/a0/9a/2c/a09a2ca3-a5a6-814b-0af7-640dc0aef0aa/091012682261.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/8b/55/f3/8b55f3a3-3204-8930-f156-82843546950e/mzaf_9370328603131228430.plus.aac.p.m4a",
-            "genres": ["indie rock", "groove"],
-            "energy": 0.74,
-            "valence": 0.78,
-            "reason": "Irresistible bassline driving feel-good momentum"
-        },
-        {
-            "id": "youtube:video:borderline",
-            "name": "Borderline",
-            "artist": "Tame Impala",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/65/e3/e7/65e3e740-b69f-f5cb-f2e6-7dedb5265ac9/19UMGIM96748.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e5/b6/05/e5b605d9-5a44-e981-d9be-2c434cb61de4/mzaf_16402977899153564031.plus.aac.p.m4a",
-            "genres": ["indie pop", "psychedelic"],
-            "energy": 0.73,
-            "valence": 0.63,
-            "reason": "Warm acoustic groove for open-road driving"
-        },
-        {
-            "id": "spotify:track:blinding_lights",
-            "name": "Blinding Lights",
-            "artist": "The Weeknd",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a",
-            "genres": ["synthpop"],
-            "energy": 0.80,
-            "valence": 0.61,
-            "reason": "Uplifting synth euphoria"
-        },
-        {
-            "id": "spotify:track:starboy",
-            "name": "Starboy",
-            "artist": "The Weeknd",
-            "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/92/bb/b592bb72-52e3-e756-9b26-9f56d08f47ab/16UMGIM67864.rgb.jpg/600x600bb.jpg",
-            "preview_url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a",
-            "genres": ["r&b", "pop"],
-            "energy": 0.82,
-            "valence": 0.68,
-            "reason": "Effortless high-confidence swagger"
-        }
-    ]
+# Sonic coordinates and profile specifications for dynamic routine querying
+ROUTINE_PROFILES = {
+    "late_night_focus": {
+        "title": "Late-Night Focus",
+        "quadrant": "Late-Night Atmospheric / R&B",
+        "target_energy": 0.45,
+        "target_valence": 0.40,
+        "energy_min": 0.20,
+        "energy_max": 0.75,
+        "valence_min": 0.15,
+        "valence_max": 0.65,
+        "target_genres": ["r&b", "soul", "ambient", "lo-fi", "indie", "electronic", "synthwave", "chill", "trip-hop"]
+    },
+    "workout_energy": {
+        "title": "Workout Energy",
+        "quadrant": "High-Energy Rhythm & Bass",
+        "target_energy": 0.85,
+        "target_valence": 0.70,
+        "energy_min": 0.65,
+        "energy_max": 1.00,
+        "valence_min": 0.35,
+        "valence_max": 1.00,
+        "target_genres": ["electronic", "house", "dance", "rock", "hip hop", "techno", "edm", "trap", "drum and bass"]
+    },
+    "feelings": {
+        "title": "In My Feelings",
+        "quadrant": "Introspective Harmonic Space",
+        "target_energy": 0.38,
+        "target_valence": 0.25,
+        "energy_min": 0.15,
+        "energy_max": 0.65,
+        "valence_min": 0.10,
+        "valence_max": 0.50,
+        "target_genres": ["acoustic", "emo rap", "indie folk", "chamber pop", "singer-songwriter", "sad", "ballad"]
+    },
+    "good_vibes": {
+        "title": "Good Vibes Daytime",
+        "quadrant": "Uplifting Synth & Funk",
+        "target_energy": 0.80,
+        "target_valence": 0.80,
+        "energy_min": 0.55,
+        "energy_max": 1.00,
+        "valence_min": 0.55,
+        "valence_max": 1.00,
+        "target_genres": ["funk", "disco", "pop", "synthpop", "groove", "indie pop", "soul"]
+    }
 }
+
+def _resolve_routine(routine_raw: str) -> Dict[str, Any]:
+    clean = (routine_raw or "late_night_focus").lower().replace("-", "_")
+    if "workout" in clean:
+        return ROUTINE_PROFILES["workout_energy"]
+    elif "feeling" in clean:
+        return ROUTINE_PROFILES["feelings"]
+    elif "vibe" in clean or "daytime" in clean:
+        return ROUTINE_PROFILES["good_vibes"]
+    return ROUTINE_PROFILES["late_night_focus"]
+
+def _clean_track_title(name: str) -> str:
+    if not name:
+        return "your favorites"
+    cleaned = name.split("#")[0].strip()
+    if len(cleaned) > 28:
+        cleaned = cleaned[:28].rstrip() + "..."
+    return cleaned or name
 
 def _filter_dealbreakers(tracks: List[Dict[str, Any]], dealbreakers: List[str]) -> List[Dict[str, Any]]:
     if not dealbreakers:
@@ -286,111 +121,232 @@ def _filter_dealbreakers(tracks: List[Dict[str, Any]], dealbreakers: List[str]) 
 @router.post("/first-deck")
 async def get_first_deck(req: OnboardingQuizRequest):
     """
-    Fuses user's connected Spotify/YouTube library with their 3-question vibe setup.
-    Guarantees strictly 5 high-confidence, high-res cards with 30s working audio streams.
+    Dynamically generates the 5-card initial onboarding deck from Neo4j.
+    Fuses the user's connected Spotify / YouTube library with graph neighbor traversals,
+    dense vector similarity embeddings, and routine sonic boundaries.
+    Guarantees strictly 5 high-fidelity cards with verified 30-second studio audio previews.
     """
-    logger.info(f"Onboarding: Generating first deck for user '{req.user_id}', routine '{req.routine}', mix '{req.mix_style}'")
-    
-    candidates: List[Dict[str, Any]] = []
+    logger.info(
+        f"Onboarding: Generating dynamic first deck for user '{req.user_id}', "
+        f"routine '{req.routine}', mix '{req.mix_style or req.discovery}', platform '{req.connected_platform}'"
+    )
 
-    # 1. Check if user has connected library tracks in Neo4j
-    try:
-        query = """
-        MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(t:Track)
-        OPTIONAL MATCH (t)-[:BY]->(a:Artist)
-        OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
-        WHERE t.preview_url IS NOT NULL AND t.preview_url <> ''
-        WITH t, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres
-        RETURN t.id AS id, t.name AS name, head(artists) AS artist, 
-               t.cover_url AS cover_url, t.preview_url AS preview_url,
-               coalesce(t.energy, 0.7) AS energy, coalesce(t.valence, 0.5) AS valence,
-               genres
-        LIMIT 20
-        """
-        records = neo4j_conn.query(query, {"user_id": req.user_id})
-        for r in records:
-            candidates.append({
-                "id": r["id"],
-                "name": r["name"],
-                "artist": r["artist"] or "Featured Artist",
-                "cover_url": r["cover_url"] or "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&h=600&fit=crop",
-                "preview_url": r["preview_url"],
-                "genres": r.get("genres", []),
-                "energy": r["energy"],
-                "valence": r["valence"],
-                "reason": f"From your connected {req.connected_platform or 'library'}"
-            })
-    except Exception as e:
-        logger.warning(f"Onboarding: Neo4j user library fetch note: {e}")
-
-    # 2. Filter out dealbreakers from user library
-    filtered_user_tracks = _filter_dealbreakers(candidates, req.dealbreakers)
-
-    # 3. Pull from curated pool for the selected routine (with flexible alias resolution)
-    routine_clean = req.routine.lower().replace("-", "_")
-    routine_map = {
-        "late_night": "late_night_focus",
-        "late_night_focus": "late_night_focus",
-        "workout": "workout_energy",
-        "workout_energy": "workout_energy",
-        "feelings": "feelings",
-        "in_my_feelings": "feelings",
-        "good_vibes": "good_vibes",
-        "good_vibes_daytime": "good_vibes"
-    }
-    pool_key = routine_map.get(routine_clean, "late_night_focus")
-    curated_pool = CURATED_ANCHOR_POOLS.get(pool_key, CURATED_ANCHOR_POOLS["late_night_focus"])
-    filtered_curated = _filter_dealbreakers(curated_pool, req.dealbreakers)
-
-    final_deck: List[Dict[str, Any]] = []
-
-    # Mix strategy resolution:
+    profile = _resolve_routine(req.routine)
     effective_mix = (req.discovery or req.mix_style or "balanced").lower()
+
     if effective_mix in ["familiar", "stick_to_known"]:
         user_quota = 4
     elif effective_mix in ["adventurous", "surprise_me"]:
-        user_quota = 2
+        user_quota = 1
     else:  # balanced
-        user_quota = 3
+        user_quota = 2
 
-    for ut in filtered_user_tracks[:user_quota]:
-        final_deck.append(ut)
+    final_deck: List[Dict[str, Any]] = []
+    seen_ids = set()
+    seen_sigs = set()
+    ref_emb = None
 
-    # Backfill with curated pool until strictly 5 cards
-    for ct in filtered_curated:
-        if len(final_deck) >= 5:
-            break
-        if not any(d.get("name", "").lower() == ct.get("name", "").lower() for d in final_deck):
-            final_deck.append(ct)
+    def try_add_track(t_item: Dict[str, Any], reason_label: str) -> bool:
+        tid = t_item.get("id") or t_item.get("track_id") or ""
+        tname = t_item.get("name") or t_item.get("title") or "Track"
+        tartist = t_item.get("artist") or "Featured Artist"
+        sig = (tartist.lower().strip(), tname.lower().strip())
+        if not tid or tid in seen_ids or sig in seen_sigs:
+            return False
+        seen_ids.add(tid)
+        seen_sigs.add(sig)
+        final_deck.append({
+            "track_id": tid,
+            "id": tid,
+            "title": tname,
+            "name": tname,
+            "artist": tartist,
+            "cover_url": t_item.get("cover_url") or "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&h=600&fit=crop",
+            "preview_url": t_item.get("preview_url") or "",
+            "genres": t_item.get("genres", []),
+            "energy": round(float(t_item.get("energy", 0.65)), 2),
+            "valence": round(float(t_item.get("valence", 0.50)), 2),
+            "quadrant": profile["quadrant"],
+            "reason": reason_label
+        })
+        return True
 
-    # Safety: If dealbreakers pruned too much, fill from remaining anchors
-    if len(final_deck) < 5:
-        for backup_pool in CURATED_ANCHOR_POOLS.values():
-            for bt in backup_pool:
+    # 1. Fetch User Library Tracks from Neo4j (if user has connected account / history)
+    if req.user_id and req.user_id != "demo_guest_user":
+        try:
+            q_user = """
+            MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(t:Track)
+            WHERE t.preview_url IS NOT NULL AND t.preview_url <> ''
+            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+            WITH t, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+                 abs(coalesce(t.energy, 0.5) - $target_e) + abs(coalesce(t.valence, 0.5) - $target_v) AS acoustic_dist,
+                 CASE WHEN t.preview_url CONTAINS '.m4a' OR t.preview_url CONTAINS '.mp3' OR t.preview_url CONTAINS 'apple' OR t.preview_url CONTAINS 'mzstatic' THEN 1 ELSE 0 END AS has_audio
+            RETURN t.id AS id, t.name AS name, head(artists) AS artist,
+                   t.cover_url AS cover_url, t.preview_url AS preview_url,
+                   coalesce(t.energy, 0.7) AS energy, coalesce(t.valence, 0.5) AS valence,
+                   genres, acoustic_dist, has_audio, t.embedding AS embedding
+            ORDER BY has_audio DESC, acoustic_dist ASC
+            LIMIT 25
+            """
+            user_rows = neo4j_conn.query(q_user, {
+                "user_id": req.user_id,
+                "target_e": profile["target_energy"],
+                "target_v": profile["target_valence"]
+            })
+            filtered_user_rows = _filter_dealbreakers(user_rows, req.dealbreakers)
+            platform_label = (req.connected_platform or "library").capitalize()
+            for r in filtered_user_rows:
+                if len(final_deck) >= user_quota:
+                    break
+                if r.get("embedding") and ref_emb is None:
+                    ref_emb = r["embedding"]
+                try_add_track(r, f"From your connected {platform_label} library")
+        except Exception as e:
+            logger.warning(f"Onboarding: Neo4j user library query error: {e}")
+
+    # 2. Fetch Graph-Neighbor Recommendations (1-to-2-hop shared artists/micro-genres)
+    if req.user_id and req.user_id != "demo_guest_user" and len(final_deck) > 0 and len(final_deck) < 5:
+        try:
+            q_neighbor = """
+            MATCH (u:User {id: $user_id})-[:LISTENED_TO]->(fav:Track)-[:BY|IN_GENRE*1..2]-(rec:Track)
+            WHERE rec.preview_url IS NOT NULL AND rec.preview_url <> ''
+              AND NOT (u)-[:LISTENED_TO]->(rec)
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            WITH fav, rec, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+                 abs(coalesce(rec.energy, 0.5) - $target_e) + abs(coalesce(rec.valence, 0.5) - $target_v) AS acoustic_dist,
+                 CASE WHEN rec.preview_url CONTAINS '.m4a' OR rec.preview_url CONTAINS '.mp3' OR rec.preview_url CONTAINS 'apple' OR rec.preview_url CONTAINS 'mzstatic' THEN 1 ELSE 0 END AS has_audio
+            RETURN rec.id AS id, rec.name AS name, head(artists) AS artist,
+                   rec.cover_url AS cover_url, rec.preview_url AS preview_url,
+                   coalesce(rec.energy, 0.7) AS energy, coalesce(rec.valence, 0.5) AS valence,
+                   genres, fav.name AS fav_name, acoustic_dist, has_audio, rec.embedding AS embedding
+            ORDER BY has_audio DESC, acoustic_dist ASC
+            LIMIT 15
+            """
+            neighbor_rows = neo4j_conn.query(q_neighbor, {
+                "user_id": req.user_id,
+                "target_e": profile["target_energy"],
+                "target_v": profile["target_valence"]
+            })
+            filtered_neighbor_rows = _filter_dealbreakers(neighbor_rows, req.dealbreakers)
+            for r in filtered_neighbor_rows:
+                if len(final_deck) >= 3:
+                    break
+                if r.get("embedding") and ref_emb is None:
+                    ref_emb = r["embedding"]
+                fav_title = _clean_track_title(r.get("fav_name", "your favorites"))
+                try_add_track(r, f"Because you love {fav_title} on your library")
+        except Exception as e:
+            logger.warning(f"Onboarding: Neo4j neighbor query error: {e}")
+
+    # 3. Dense Vector Similarity Query via Neo4j track_embeddings index (AI Agent Discovery)
+    if ref_emb is not None and len(final_deck) < 5:
+        try:
+            q_vec = """
+            CALL db.index.vector.queryNodes("track_embeddings", 100, $emb)
+            YIELD node AS rec, score
+            WHERE rec.preview_url IS NOT NULL AND rec.preview_url <> ''
+            OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
+            WITH rec, head(collect(DISTINCT a.name)) AS artist, collect(DISTINCT g.name) AS genres, score,
+                 CASE WHEN rec.preview_url CONTAINS '.m4a' OR rec.preview_url CONTAINS '.mp3' OR rec.preview_url CONTAINS 'apple' OR rec.preview_url CONTAINS 'mzstatic' THEN 1 ELSE 0 END AS has_audio
+            RETURN rec.id AS id, rec.name AS name, artist,
+                   rec.cover_url AS cover_url, rec.preview_url AS preview_url,
+                   coalesce(rec.energy, 0.7) AS energy, coalesce(rec.valence, 0.5) AS valence,
+                   genres, score, has_audio
+            ORDER BY has_audio DESC, score DESC
+            LIMIT 25
+            """
+            vec_rows = neo4j_conn.query(q_vec, {"emb": ref_emb})
+            filtered_vec_rows = _filter_dealbreakers(vec_rows, req.dealbreakers)
+            for r in filtered_vec_rows:
                 if len(final_deck) >= 5:
                     break
-                if not any(d.get("name", "").lower() == bt.get("name", "").lower() for d in final_deck):
-                    final_deck.append(bt)
+                try_add_track(r, "One from our AI Agent (;")
+        except Exception as e:
+            logger.warning(f"Onboarding: Neo4j vector search query error: {e}")
 
-    # Normalize card attributes so both mobile and web have complete properties
-    normalized_cards = []
+    # 4. Global Acoustic Bounds Query from Neo4j (for guest users or backfill)
+    if len(final_deck) < 5:
+        try:
+            q_global = """
+            MATCH (t:Track)
+            WHERE t.preview_url IS NOT NULL AND t.preview_url <> ''
+              AND coalesce(t.energy, 0.7) >= $e_min AND coalesce(t.energy, 0.7) <= $e_max
+            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+            OPTIONAL MATCH (t)-[:IN_GENRE]->(g:Genre)
+            WITH t, collect(DISTINCT a.name) AS artists, collect(DISTINCT g.name) AS genres,
+                 abs(coalesce(t.energy, 0.5) - $target_e) + abs(coalesce(t.valence, 0.5) - $target_v) AS acoustic_dist,
+                 CASE WHEN t.preview_url CONTAINS '.m4a' OR t.preview_url CONTAINS '.mp3' OR t.preview_url CONTAINS 'apple' OR t.preview_url CONTAINS 'mzstatic' THEN 1 ELSE 0 END AS has_audio
+            RETURN t.id AS id, t.name AS name, head(artists) AS artist,
+                   t.cover_url AS cover_url, t.preview_url AS preview_url,
+                   coalesce(t.energy, 0.7) AS energy, coalesce(t.valence, 0.5) AS valence,
+                   coalesce(t.popularity, 50) AS pop,
+                   genres, acoustic_dist, has_audio, t.embedding AS embedding
+            ORDER BY has_audio DESC, acoustic_dist ASC, pop DESC
+            LIMIT 40
+            """
+            glob_rows = neo4j_conn.query(q_global, {
+                "e_min": profile["energy_min"],
+                "e_max": profile["energy_max"],
+                "target_e": profile["target_energy"],
+                "target_v": profile["target_valence"]
+            })
+            filtered_glob_rows = _filter_dealbreakers(glob_rows, req.dealbreakers)
+            is_guest = not req.user_id or req.user_id == "demo_guest_user" or len(final_deck) == 0
+            guest_anchor_count = 0
+            for r in filtered_glob_rows:
+                if len(final_deck) >= 5:
+                    break
+                if is_guest and guest_anchor_count < 2:
+                    added = try_add_track(r, f"Curated for your {profile['title']} baseline")
+                    if added:
+                        guest_anchor_count += 1
+                else:
+                    try_add_track(r, "One from our AI Agent (;")
+        except Exception as e:
+            logger.warning(f"Onboarding: Neo4j global acoustic query error: {e}")
+
+    # 5. Safety Fallback: Ensure strictly 5 cards even if extreme dealbreakers were passed
+    if len(final_deck) < 5:
+        try:
+            q_fallback = """
+            MATCH (t:Track)
+            WHERE t.preview_url IS NOT NULL AND t.preview_url <> ''
+            OPTIONAL MATCH (t)-[:BY]->(a:Artist)
+            WITH t, head(collect(DISTINCT a.name)) AS artist
+            RETURN t.id AS id, t.name AS name, artist,
+                   t.cover_url AS cover_url, t.preview_url AS preview_url,
+                   coalesce(t.energy, 0.7) AS energy, coalesce(t.valence, 0.5) AS valence,
+                   coalesce(t.popularity, 50) AS pop
+            ORDER BY pop DESC
+            LIMIT 20
+            """
+            fallback_rows = neo4j_conn.query(q_fallback)
+            for r in fallback_rows:
+                if len(final_deck) >= 5:
+                    break
+                try_add_track(r, "One from our AI Agent (;")
+        except Exception as e:
+            logger.warning(f"Onboarding: Neo4j fallback query error: {e}")
+
+    # 6. Verify and JIT hydrate direct audio previews if any track has a web/youtube link
     for c in final_deck[:5]:
-        normalized_cards.append({
-            "track_id": c.get("id") or c.get("track_id", "track_anchor"),
-            "id": c.get("id") or c.get("track_id", "track_anchor"),
-            "title": c.get("name") or c.get("title", "Track"),
-            "name": c.get("name") or c.get("title", "Track"),
-            "artist": c.get("artist", "Featured Artist"),
-            "cover_url": c.get("cover_url", "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&h=600&fit=crop"),
-            "preview_url": c.get("preview_url", ""),
-            "genres": c.get("genres", []),
-            "energy": c.get("energy", 0.65),
-            "valence": c.get("valence", 0.50),
-            "quadrant": c.get("reason", "Curated for your routine"),
-            "reason": c.get("reason", "Curated for your routine")
-        })
+        prev = c.get("preview_url", "")
+        if "youtube.com" in prev or "youtu.be" in prev or not prev:
+            try:
+                hydrated = await JITHydrationWorker.fetch_preview_audio_url(c["title"], c["artist"])
+                if hydrated and hydrated.get("preview_url") and not ("youtube" in hydrated.get("preview_url", "")):
+                    c["preview_url"] = hydrated["preview_url"]
+                    if hydrated.get("artwork_url"):
+                        c["cover_url"] = hydrated["artwork_url"]
+            except Exception as e:
+                logger.debug(f"Onboarding: JIT preview hydration note for {c['title']}: {e}")
 
-    logger.info(f"Onboarding: Curated {len(normalized_cards)} initial cards for '{req.user_id}'")
+    normalized_cards = final_deck[:5]
+    logger.info(f"Onboarding: Dynamically generated {len(normalized_cards)} cards for '{req.user_id}'")
+
     return {
         "status": "success",
         "title": "Top 5 Songs We curated for you",

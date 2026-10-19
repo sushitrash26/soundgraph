@@ -296,6 +296,144 @@ button {
   animation: spark-pulse 2.8s ease-in-out infinite;
 }
 
+.landing-shell::after {
+  position: fixed;
+  top: -12rem;
+  left: 50%;
+  z-index: 0;
+  width: 36rem;
+  height: 36rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 70px rgba(255,255,255,.018),
+    0 0 0 140px rgba(255,255,255,.012);
+  content: "";
+  pointer-events: none;
+}
+
+.brand-mark {
+  border: 1px solid rgba(255,255,255,.7);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255,255,255,.9), transparent 35%),
+    linear-gradient(145deg, #e8ff9f, #aadd37);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.8), 0 10px 30px rgba(180,230,60,.14);
+}
+
+.landing-visual {
+  perspective: 900px;
+  transform-style: preserve-3d;
+}
+
+.cover-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8.6rem;
+  height: 10.7rem;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 1.45rem;
+  background: rgba(255,255,255,.08);
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,.35),
+    0 25px 60px rgba(0,0,0,.38);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.cover-card::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(130deg, rgba(255,255,255,.32), transparent 28%, transparent 68%, rgba(255,255,255,.06));
+  content: "";
+  pointer-events: none;
+}
+
+.cover-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(.78) contrast(1.04);
+}
+
+.cover-card-left {
+  z-index: 1;
+  transform: translate(-106%, -45%) rotateY(22deg) rotateZ(-9deg) scale(.84);
+  animation: cover-left 6s ease-in-out infinite;
+}
+
+.cover-card-center {
+  z-index: 3;
+  width: 9.6rem;
+  height: 12rem;
+  transform: translate(-50%, -50%) translateZ(38px);
+  animation: cover-center 5s ease-in-out infinite;
+}
+
+.cover-card-right {
+  z-index: 1;
+  transform: translate(5%, -45%) rotateY(-22deg) rotateZ(9deg) scale(.84);
+  animation: cover-right 6.5s ease-in-out infinite;
+}
+
+.music-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(215,255,100,.18);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.music-orbit span {
+  position: absolute;
+  top: 50%;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d7ff64;
+  box-shadow: 0 0 14px rgba(215,255,100,.75);
+}
+
+.music-orbit-one {
+  width: 19rem;
+  height: 8.5rem;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  animation: orbit-pulse 4s ease-in-out infinite;
+}
+
+.music-orbit-two {
+  width: 15rem;
+  height: 12rem;
+  transform: translate(-50%, -50%) rotate(58deg);
+  border-color: rgba(139,92,246,.18);
+  animation: orbit-pulse 4s 1s ease-in-out infinite;
+}
+
+.music-orbit-two span {
+  background: #a879ff;
+  box-shadow: 0 0 14px rgba(139,92,246,.75);
+}
+
+.connect-button {
+  border: 1px solid transparent;
+  transition: transform 280ms ease, background 280ms ease, border-color 280ms ease;
+}
+
+.connect-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.12);
+  background: rgba(255,255,255,.065);
+}
+
+.connect-button:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
 .aurora {
   background:
     radial-gradient(circle at 30% 30%, #d7ff64 0, transparent 38%),
@@ -371,6 +509,26 @@ button {
   0%, 48% { transform: translateX(-180%) rotate(22deg); opacity: 0; }
   58% { opacity: .85; }
   75%, 100% { transform: translateX(520%) rotate(22deg); opacity: 0; }
+}
+
+@keyframes cover-left {
+  0%, 100% { transform: translate(-106%, -45%) rotateY(22deg) rotateZ(-9deg) scale(.84); }
+  50% { transform: translate(-110%, -50%) rotateY(18deg) rotateZ(-7deg) scale(.86); }
+}
+
+@keyframes cover-center {
+  0%, 100% { transform: translate(-50%, -50%) translateZ(38px) rotateX(0); }
+  50% { transform: translate(-50%, -56%) translateZ(52px) rotateX(2deg); }
+}
+
+@keyframes cover-right {
+  0%, 100% { transform: translate(5%, -45%) rotateY(-22deg) rotateZ(9deg) scale(.84); }
+  50% { transform: translate(9%, -50%) rotateY(-18deg) rotateZ(7deg) scale(.86); }
+}
+
+@keyframes orbit-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
 }
 
 @media (min-width: 700px) {
