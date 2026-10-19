@@ -421,6 +421,7 @@ class MigrationService:
         if target == "spotify" and method == "clipboard":
             uris = [t.get("target_uri") or f"{t.get('matched_artist', '')} - {t.get('matched_title', '')}".strip(' -') or t.get('name', 'Track') for t in tracks]
             clipboard_lines = "\n".join([u for u in uris if u])
+            cls._record_migration_event(user_id, safe_title, source_platform, target, len(tracks))
             return {
                 "status": "success",
                 "method": "clipboard",
@@ -472,6 +473,7 @@ class MigrationService:
                         pl_url = f"https://music.youtube.com/playlist?list={pl_id}"
                         logger.info(f"Successfully created YouTube playlist '{safe_title}' (ID: {pl_id})")
 
+                        cls._record_migration_event(user_id, safe_title, source_platform, target, len(tracks))
                         return {
                             "status": "success",
                             "method": "direct",
@@ -499,6 +501,7 @@ class MigrationService:
 
         # Execution Mode C: Target is Spotify (Direct Sync)
         uris = [t.get("target_uri") or f"{t.get('matched_artist', '')} - {t.get('matched_title', '')}".strip(' -') or t.get('name', 'Track') for t in tracks]
+        cls._record_migration_event(user_id, safe_title, source_platform, target, len(tracks))
         return {
             "status": "success",
             "method": "direct",
@@ -510,3 +513,33 @@ class MigrationService:
             "playlist_url": f"https://open.spotify.com/search/{safe_title}",
             "message": f"Successfully created '{safe_title}' with {len(tracks)} tracks on Spotify!"
         }
+
+    @classmethod
+    def _record_migration_event(cls, user_id: str, playlist_title: str, source: str, target: str, tracks_count: int):
+        """Records completed migration events in Neo4j to drive real-time passport migration story metrics."""
+        try:
+            duration_est = tracks_count * 210
+            q = """
+            MATCH (u:User {id: $uid})
+            CREATE (m:MigrationEvent {
+                id: randomUUID(),
+                title: $title,
+                source_platform: $source,
+                target_platform: $target,
+                tracks_count: $count,
+                duration_seconds: $duration,
+                created_at: datetime()
+            })
+            CREATE (u)-[:EXECUTED_MIGRATION]->(m)
+            """
+            neo4j_conn.query(q, {
+                "uid": user_id,
+                "title": playlist_title,
+                "source": source,
+                "target": target,
+                "count": tracks_count,
+                "duration": duration_est
+            })
+            logger.info(f"MigrationService: Recorded MigrationEvent for '{user_id}': {tracks_count} tracks to {target}")
+        except Exception as e:
+            logger.warning(f"MigrationService: Note persisting MigrationEvent in Neo4j: {e}")

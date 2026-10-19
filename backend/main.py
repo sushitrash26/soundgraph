@@ -15,6 +15,7 @@ from backend.api.routes.search import router as search_router
 from backend.api.routes.deck import router as deck_router
 from backend.api.routes.migration import router as migration_router
 from backend.api.routes.onboarding import router as onboarding_router
+from backend.api.routes.profile import router as profile_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +55,7 @@ app.include_router(search_router)
 app.include_router(deck_router)
 app.include_router(migration_router)
 app.include_router(onboarding_router)
+app.include_router(profile_router)
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):

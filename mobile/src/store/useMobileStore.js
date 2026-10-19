@@ -80,6 +80,10 @@ export const useMobileStore = create((set, get) => ({
   isMigratingExecution: false,
   migrationResult: null,
 
+  // Live Graph RAG User Profile & Passport State
+  userProfileData: null,
+  isLoadingProfile: false,
+
   apiBase: API_BASE,
   getApiBase: () => get().apiBase || API_BASE,
 
@@ -762,12 +766,32 @@ export const useMobileStore = create((set, get) => ({
         method: settings.method || 'direct'
       });
       set({ migrationResult: res.data, isMigratingExecution: false });
+      // Refresh profile migration metrics in background
+      get().fetchUserProfile();
     } catch (e) {
       console.warn('Migration execution error:', e.message);
       set({
         migrationResult: { status: 'error', message: 'Failed to complete migration.' },
         isMigratingExecution: false
       });
+    }
+  },
+
+  // Live Graph RAG Profile & Passport Fetch
+  fetchUserProfile: async () => {
+    set({ isLoadingProfile: true });
+    try {
+      const user = get().user;
+      const queryParam = user?.id ? `?user_id=${encodeURIComponent(user.id)}` : '';
+      const res = await axios.get(`${get().getApiBase()}/profile/me${queryParam}`, { timeout: 6000 });
+      if (res.data?.status === 'success') {
+        set({ userProfileData: res.data, isLoadingProfile: false });
+      } else {
+        set({ isLoadingProfile: false });
+      }
+    } catch (e) {
+      console.warn('Error fetching user profile:', e.message);
+      set({ isLoadingProfile: false });
     }
   }
 }));

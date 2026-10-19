@@ -74,12 +74,19 @@ export default function ProfileScreen({ onOpenAuth }) {
     setOnboardingStep,
     setCurrentTab,
     youtubePlaylists,
-    spotifyPlaylists
+    spotifyPlaylists,
+    userProfileData,
+    isLoadingProfile,
+    fetchUserProfile
   } = useMobileStore();
 
   const [period, setPeriod] = useState('month'); // 'month' | 'year'
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
 
   // Animations matching Figma index.css exactly:
   // 1. Shimmer sweep across hero acrylic glass card
@@ -193,20 +200,48 @@ export default function ProfileScreen({ onOpenAuth }) {
     transform: [{ translateY: orbFloat.value }]
   }));
 
-  const isGoogleConnected = authStatus?.google_connected || !!user;
-  const isSpotifyConnected = authStatus?.spotify_connected;
-  const connectedCount = (isGoogleConnected ? 1 : 0) + (isSpotifyConnected ? 1 : 0) || 1;
+  const profileUser = userProfileData?.user || user;
+  const userName = profileUser?.name || 'Explorer';
+  const userAvatar = profileUser?.avatar_url || FEATURED_ARTISTS[0].image;
+  const connectedPlatforms = profileUser?.connected_platforms || (authStatus?.spotify_connected ? ['spotify'] : ['youtube']);
+  const connectedCount = connectedPlatforms.length || 1;
 
-  const archetype = onboardingMilestoneData?.archetype || 'Midnight Explorer';
-  const userName = user?.name || 'Maya';
-  const userAvatar = user?.avatar_url || FEATURED_ARTISTS[0].image;
+  const archetype = userProfileData?.passport?.archetype || onboardingMilestoneData?.archetype || 'Midnight Explorer';
+  const tagline = userProfileData?.passport?.tagline || 'Dreamy vocals, late-night R&B and a little beautiful chaos.';
 
-  const totalPlaylists = (youtubePlaylists?.length || 0) + (spotifyPlaylists?.length || 0) || 14;
+  const topArtists = userProfileData?.top_artists && userProfileData.top_artists.length >= 2
+    ? userProfileData.top_artists
+    : FEATURED_ARTISTS;
+
+  const signature = userProfileData?.signature;
+  const activePeriodSignature = signature ? signature[period] : null;
+  const discoveryScore = activePeriodSignature ? activePeriodSignature.discovery_score : (period === 'month' ? 82 : 76);
+  const discoveryTag = activePeriodSignature ? activePeriodSignature.tag : 'Explorer';
+
+  const sliders = activePeriodSignature?.sliders || [
+    { start: 'Familiar', end: 'Adventurous', value: period === 'month' ? 82 : 76 },
+    { start: 'Calm', end: 'Energetic', value: period === 'month' ? 64 : 58 },
+    { start: 'Focused', end: 'Eclectic', value: period === 'month' ? 73 : 69 }
+  ];
+
+  const migration = userProfileData?.migration;
+  const tracksMoved = migration ? migration.tracks_moved : 0;
+  const hoursPreserved = migration ? migration.hours_preserved : '0 hrs';
+  const perfectTransfers = migration ? migration.perfect_transfers : 0;
+  const hasMigrated = migration ? migration.has_migrated : false;
+
+  const featuredBadge = userProfileData?.featured_badge || {
+    title: 'Bridge Builder',
+    rarity_tag: 'TOP 8% RARE',
+    description: 'Moved over 1,000 tracks between worlds.',
+    icon: 'route'
+  };
 
   const handleCopyLink = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await Clipboard.setStringAsync(`https://soundgraph.app/passport/${user?.id || 'explorer'}`);
+      const shareUrl = userProfileData?.passport?.share_url || `https://soundgraph.app/passport/${user?.id || 'explorer'}`;
+      await Clipboard.setStringAsync(shareUrl);
     } catch {
       // fallback
     }
@@ -322,26 +357,28 @@ export default function ProfileScreen({ onOpenAuth }) {
               <View style={styles.heroMidContent}>
                 <Text style={styles.passportOwnerText}>{userName}’s music passport</Text>
                 <Text style={styles.heroArchetypeTitle}>
-                  {archetype === 'Midnight Explorer' ? 'Midnight\nExplorer' : archetype}
+                  {archetype.includes(' ') ? archetype.replace(' ', '\n') : archetype}
                 </Text>
                 <Text style={styles.heroTagline}>
-                  Dreamy vocals, late-night R&B and a little beautiful chaos.
+                  {tagline}
                 </Text>
               </View>
 
               {/* Bottom Row: Connected Platforms & "View passport" CTA */}
               <View style={styles.heroBottomRow}>
                 <View style={styles.platformsRow}>
-                  {/* Spotify Dot */}
-                  <View style={[styles.platformIconDot, { backgroundColor: '#1ED760' }]}>
-                    <Text style={styles.platformDotLetter}>S</Text>
-                  </View>
-                  {/* YouTube Dot */}
-                  <View style={[styles.platformIconDot, { backgroundColor: '#FF0033' }]}>
-                    <Text style={styles.platformDotLetter}>▶</Text>
-                  </View>
+                  {connectedPlatforms.includes('spotify') && (
+                    <View style={[styles.platformIconDot, { backgroundColor: '#1ED760' }]}>
+                      <Text style={styles.platformDotLetter}>S</Text>
+                    </View>
+                  )}
+                  {connectedPlatforms.includes('youtube') && (
+                    <View style={[styles.platformIconDot, { backgroundColor: '#FF0033' }]}>
+                      <Text style={styles.platformDotLetter}>▶</Text>
+                    </View>
+                  )}
                   <Text style={styles.platformsConnectedText}>
-                    {connectedCount} platforms connected
+                    {connectedCount} platform{connectedCount === 1 ? '' : 's'} connected
                   </Text>
                 </View>
 
@@ -372,7 +409,7 @@ export default function ProfileScreen({ onOpenAuth }) {
 
           {/* Exact CSS grid-cols-[1.55fr_1fr_1fr] Geometry */}
           <View style={{ flexDirection: 'row', gap: GAP }}>
-            {/* Col 1: Card 01 (SZA tall card, spanning 2 rows) */}
+            {/* Col 1: Card 01 (tall card, spanning 2 rows) */}
             <View
               style={[
                 styles.artistHeroCard,
@@ -380,7 +417,7 @@ export default function ProfileScreen({ onOpenAuth }) {
               ]}
             >
               <Image
-                source={{ uri: FEATURED_ARTISTS[0].image }}
+                source={{ uri: topArtists[0]?.image || FEATURED_ARTISTS[0].image }}
                 style={styles.cardCoverImg}
                 resizeMode="cover"
               />
@@ -390,25 +427,25 @@ export default function ProfileScreen({ onOpenAuth }) {
               />
               <Text style={styles.artistRankHero}>01</Text>
               <View style={styles.artistHeroMeta}>
-                <Text style={styles.artistHeroName} numberOfLines={1}>{FEATURED_ARTISTS[0].name}</Text>
-                <Text style={styles.artistHeroGenre} numberOfLines={1}>{FEATURED_ARTISTS[0].genre}</Text>
+                <Text style={styles.artistHeroName} numberOfLines={1}>{topArtists[0]?.name || 'Artist'}</Text>
+                <Text style={styles.artistHeroGenre} numberOfLines={1}>{topArtists[0]?.genre || 'Contemporary'}</Text>
               </View>
             </View>
 
             {/* Col 2 & Col 3 Container */}
             <View style={{ flex: 1, gap: GAP }}>
-              {/* Row 1: Cards 02 (Frank Ocean) & 03 (FKA twigs) */}
+              {/* Row 1: Cards 02 & 03 */}
               <View style={{ flexDirection: 'row', gap: GAP }}>
-                {FEATURED_ARTISTS.slice(1, 3).map((artist, idx) => (
+                {topArtists.slice(1, 3).map((artist, idx) => (
                   <View
-                    key={artist.name}
+                    key={artist.name || idx}
                     style={[
                       styles.artistSquareCard,
                       { width: SQUARE_SIZE, height: SQUARE_SIZE }
                     ]}
                   >
                     <Image
-                      source={{ uri: artist.image }}
+                      source={{ uri: artist.image || FEATURED_ARTISTS[idx + 1].image }}
                       style={styles.cardCoverImg}
                       resizeMode="cover"
                     />
@@ -424,7 +461,7 @@ export default function ProfileScreen({ onOpenAuth }) {
                 ))}
               </View>
 
-              {/* Row 2: Card 04 (Tame Impala) */}
+              {/* Row 2: Card 04 */}
               <View style={{ flexDirection: 'row', gap: GAP }}>
                 <View
                   style={[
@@ -433,7 +470,7 @@ export default function ProfileScreen({ onOpenAuth }) {
                   ]}
                 >
                   <Image
-                    source={{ uri: FEATURED_ARTISTS[3].image }}
+                    source={{ uri: topArtists[3]?.image || topArtists[0]?.image || FEATURED_ARTISTS[3].image }}
                     style={styles.cardCoverImg}
                     resizeMode="cover"
                   />
@@ -443,14 +480,14 @@ export default function ProfileScreen({ onOpenAuth }) {
                   />
                   <Text style={styles.artistRankSquare}>04</Text>
                   <Text style={styles.artistSquareName} numberOfLines={1}>
-                    {FEATURED_ARTISTS[3].name}
+                    {topArtists[3]?.name || topArtists[0]?.name || 'Artist'}
                   </Text>
                 </View>
               </View>
             </View>
           </View>
 
-          <Text style={styles.mosaicFootnote}>Portrait photography from Unsplash</Text>
+          <Text style={styles.mosaicFootnote}>Verified artist portraits cached from Deezer & graph</Text>
         </View>
 
         {/* Section 3: "Your pulse" / "Music signature" */}
@@ -510,24 +547,20 @@ export default function ProfileScreen({ onOpenAuth }) {
                 <Text style={styles.discoveryLabel}>Discovery score</Text>
                 <View style={styles.discoveryScoreRow}>
                   <Text style={styles.discoveryScoreVal}>
-                    {period === 'month' ? '82' : '76'}
+                    {discoveryScore}
                   </Text>
                   <Text style={styles.discoveryScorePercent}>%</Text>
                 </View>
               </View>
 
               <View style={styles.explorerTag}>
-                <Text style={styles.explorerTagText}>Explorer</Text>
+                <Text style={styles.explorerTagText}>{discoveryTag}</Text>
               </View>
             </View>
 
             {/* Gradient Spectrum Sliders */}
             <View style={styles.spectrumSlidersContainer}>
-              {[
-                { start: 'Familiar', end: 'Adventurous', val: period === 'month' ? 82 : 76 },
-                { start: 'Calm', end: 'Energetic', val: period === 'month' ? 64 : 58 },
-                { start: 'Focused', end: 'Eclectic', val: period === 'month' ? 73 : 69 }
-              ].map((spec) => (
+              {sliders.map((spec) => (
                 <View key={spec.start} style={styles.spectrumRow}>
                   <View style={styles.spectrumLabels}>
                     <Text style={styles.spectrumEndText}>{spec.start}</Text>
@@ -538,7 +571,7 @@ export default function ProfileScreen({ onOpenAuth }) {
                       colors={['#8B5CF6', '#FA7185', '#D7FF64']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
-                      style={[styles.spectrumFill, { width: `${spec.val}%` }]}
+                      style={[styles.spectrumFill, { width: `${spec.value}%` }]}
                     />
                   </View>
                 </View>
@@ -569,7 +602,18 @@ export default function ProfileScreen({ onOpenAuth }) {
               </Animated.View>
               <View style={styles.limeContentCol}>
                 <Text style={styles.limeCardTag}>TRACKS MOVED</Text>
-                <Text style={styles.limeCardCount}>1,248</Text>
+                <Text style={styles.limeCardCount}>{tracksMoved.toLocaleString()}</Text>
+                {!hasMigrated && (
+                  <Pressable
+                    style={styles.migrateCtaBtn}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setCurrentTab('migration');
+                    }}
+                  >
+                    <Text style={styles.migrateCtaText}>Migrate your first playlist ➔</Text>
+                  </Pressable>
+                )}
               </View>
               <View style={styles.limeIconCircle}>
                 <GitFork size={28} color="#11120E" strokeWidth={2.2} />
@@ -581,14 +625,14 @@ export default function ProfileScreen({ onOpenAuth }) {
               {/* Left: Music Preserved */}
               <BlurView intensity={75} tint="dark" style={styles.migrationSubCard}>
                 <Headphones size={22} color="#FA7185" style={{ marginBottom: 20 }} />
-                <Text style={styles.migrationSubCount}>94 hrs</Text>
+                <Text style={styles.migrationSubCount}>{hoursPreserved}</Text>
                 <Text style={styles.migrationSubDesc}>Music preserved</Text>
               </BlurView>
 
               {/* Right: Perfect Transfers */}
               <BlurView intensity={75} tint="dark" style={styles.migrationSubCard}>
                 <RotateCcw size={22} color="#8B5CF6" style={{ marginBottom: 20 }} />
-                <Text style={styles.migrationSubCount}>{totalPlaylists}</Text>
+                <Text style={styles.migrationSubCount}>{perfectTransfers}</Text>
                 <Text style={styles.migrationSubDesc}>Perfect transfers</Text>
               </BlurView>
             </View>
@@ -613,10 +657,10 @@ export default function ProfileScreen({ onOpenAuth }) {
             </Animated.View>
 
             <View style={styles.badgeMetaCol}>
-              <Text style={styles.badgeRareTag}>TOP 8% RARE</Text>
-              <Text style={styles.badgeTitle}>Bridge Builder</Text>
+              <Text style={styles.badgeRareTag}>{featuredBadge.rarity_tag}</Text>
+              <Text style={styles.badgeTitle}>{featuredBadge.title}</Text>
               <Text style={styles.badgeSubtitle}>
-                Moved over 1,000 tracks between worlds.
+                {featuredBadge.description}
               </Text>
             </View>
           </BlurView>
@@ -679,11 +723,11 @@ export default function ProfileScreen({ onOpenAuth }) {
                 </View>
 
                 <Text style={styles.passportSoundIsText}>{userName}’s sound is</Text>
-                <Text style={styles.passportLargeHeadline}>A midnight explorer.</Text>
+                <Text style={styles.passportLargeHeadline}>A {archetype.toLowerCase()}.</Text>
 
                 <View style={styles.passportGraphicBottomDivider}>
                   <Text style={styles.passportArtistsList}>
-                    SZA · Frank Ocean · FKA twigs
+                    {topArtists.slice(0, 3).map((a) => a.name).join(' · ')}
                   </Text>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.passportMadeWithTag}>MADE WITH</Text>
@@ -1225,6 +1269,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#11120E',
     letterSpacing: -1.2,
+    fontFamily: 'DMSans_700Bold'
+  },
+  migrateCtaBtn: {
+    marginTop: 8,
+    backgroundColor: '#11120E',
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 20,
+    alignSelf: 'flex-start'
+  },
+  migrateCtaText: {
+    color: '#D7FF64',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     fontFamily: 'DMSans_700Bold'
   },
   limeIconCircle: {

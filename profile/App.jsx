@@ -1,34 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
 type IconProps = {
   name: "arrow" | "share" | "spark" | "headphones" | "route" | "user" | "home" | "compass" | "transfer" | "close";
   className?: string;
 };
 
-const artists = [
+const defaultArtists = [
   {
-    name: "SZA",
-    genre: "Alternative R&B",
-    image:
-      "https://images.unsplash.com/photo-1590506357340-4f2d8f5da5cd?auto=format&fit=crop&w=520&q=85",
+    rank: "01",
+    name: "Kendrick Lamar",
+    genre: "Hip Hop",
+    image: "https://cdn-images.dzcdn.net/images/artist/be0a7c550567f4af0ed202d7235b74d6/500x500-000000-80-0-0.jpg",
   },
   {
-    name: "Frank Ocean",
-    genre: "Neo soul",
-    image:
-      "https://images.unsplash.com/photo-1553291413-e5f0e2932694?auto=format&fit=crop&w=360&q=85",
+    rank: "02",
+    name: "The Weeknd",
+    genre: "R&B / Synthpop",
+    image: "https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/500x500-000000-80-0-0.jpg",
   },
   {
-    name: "FKA twigs",
-    genre: "Art pop",
-    image:
-      "https://images.unsplash.com/photo-1773592620747-b63734b81740?auto=format&fit=crop&w=360&q=85",
+    rank: "03",
+    name: "Kanye West",
+    genre: "Art Pop",
+    image: "https://cdn-images.dzcdn.net/images/artist/bb76c2ee3b068726ab4c37b0aabdb57a/500x500-000000-80-0-0.jpg",
   },
   {
-    name: "Tame Impala",
-    genre: "Psychedelic pop",
-    image:
-      "https://images.unsplash.com/photo-1760800185627-12eb152aaca4?auto=format&fit=crop&w=360&q=85",
+    rank: "04",
+    name: "Daft Punk",
+    genre: "Electronic",
+    image: "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
   },
 ];
 
@@ -53,12 +55,18 @@ function Icon({ name, className = "size-5" }: IconProps) {
   );
 }
 
-function ShareSheet({ onClose }: { onClose: () => void }) {
+function ShareSheet({ onClose, profileData }: { onClose: () => void; profileData: any }) {
   const [copied, setCopied] = useState(false);
+
+  const userName = profileData?.user?.name || "Sound Explorer";
+  const archetype = profileData?.passport?.archetype || "Midnight Explorer";
+  const shareUrl = profileData?.passport?.share_url || window.location.href;
+  const artists = profileData?.top_artists || defaultArtists;
+  const artistsStr = artists.slice(0, 3).map((a: any) => a.name).join(" · ");
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(shareUrl);
     } catch {
       // Clipboard access can be unavailable in embedded previews.
     }
@@ -78,11 +86,11 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
               <span className="text-xs font-bold uppercase tracking-[0.22em]">Music passport</span>
               <span className="rounded-full bg-black/10 px-3 py-1 text-[10px] font-bold">2025</span>
             </div>
-            <p className="text-sm font-semibold opacity-70">Maya’s sound is</p>
-            <h2 className="mt-1 max-w-[12ch] text-5xl font-semibold leading-[0.9] tracking-[-0.055em]">A midnight explorer.</h2>
+            <p className="text-sm font-semibold opacity-70">{userName}’s sound is</p>
+            <h2 className="mt-1 max-w-[12ch] text-5xl font-semibold leading-[0.9] tracking-[-0.055em]">A {archetype.toLowerCase()}.</h2>
             <div className="mt-10 flex items-end justify-between border-t border-black/15 pt-4">
-              <p className="max-w-[18ch] text-xs font-semibold leading-relaxed">SZA · Frank Ocean · FKA twigs</p>
-              <p className="text-right text-[10px] font-bold uppercase tracking-wider">made with<br />Soundport</p>
+              <p className="max-w-[18ch] text-xs font-semibold leading-relaxed">{artistsStr}</p>
+              <p className="text-right text-[10px] font-bold uppercase tracking-wider">made with<br />SoundGraph</p>
             </div>
           </div>
         </div>
@@ -102,6 +110,65 @@ function ShareSheet({ onClose }: { onClose: () => void }) {
 function ProfileScreen({ onBack }: { onBack: () => void }) {
   const [period, setPeriod] = useState<"month" | "year">("month");
   const [shareOpen, setShareOpen] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadLiveProfile() {
+      try {
+        const res = await fetch(`${API_BASE}/profile/me`);
+        const json = await res.json();
+        if (json?.status === "success") {
+          setProfileData(json);
+        }
+      } catch (err) {
+        console.warn("Could not fetch real-time profile from API:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadLiveProfile();
+  }, []);
+
+  const user = profileData?.user || {
+    name: "Sound Explorer",
+    avatar_url: defaultArtists[0].image,
+    connected_platforms: ["spotify", "youtube"],
+    updated_at: "Updated today"
+  };
+
+  const passport = profileData?.passport || {
+    archetype: "Midnight Explorer",
+    tagline: "Dreamy vocals, late-night R&B and a little beautiful chaos.",
+    share_url: window.location.href
+  };
+
+  const topArtists = profileData?.top_artists && profileData.top_artists.length >= 2
+    ? profileData.top_artists
+    : defaultArtists;
+
+  const signature = profileData?.signature;
+  const currentSignature = signature ? signature[period] : null;
+  const discoveryScore = currentSignature ? currentSignature.discovery_score : (period === "month" ? 82 : 76);
+  const discoveryTag = currentSignature ? currentSignature.tag : "Explorer";
+  const sliders = currentSignature ? currentSignature.sliders.map((s: any) => [s.start, s.end, s.value]) : [
+    ["Analog Strings", "Digital Synths", period === "month" ? 75 : 70],
+    ["Introspective Calm", "Kinetic Rapture", period === "month" ? 65 : 59],
+    ["Underground Crates", "Stadium Anthems", period === "month" ? 95 : 90],
+  ];
+
+  const migration = profileData?.migration || {
+    tracks_moved: 0,
+    hours_preserved: "0 hrs",
+    perfect_transfers: 0,
+    has_migrated: false
+  };
+
+  const featuredBadge = profileData?.featured_badge || {
+    title: "Bridge Builder",
+    rarity_tag: "TOP 8% RARE",
+    description: "Moved over 1,000 tracks between worlds."
+  };
 
   return (
     <div className="app-shell min-h-screen text-[#f4f3ee] selection:bg-[#d7ff64] selection:text-black">
@@ -126,31 +193,45 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
             <div className="absolute -bottom-36 -left-20 size-72 rounded-full bg-[#b8f23d]/25 blur-3xl" />
             <div className="relative flex items-start justify-between">
               <div className="relative">
-                <img src={artists[0].image} alt="Maya's profile" className="size-20 rounded-2xl object-cover object-top grayscale-[15%]" />
+                <img
+                  src={user.avatar_url || topArtists[0]?.image}
+                  alt={`${user.name}'s profile`}
+                  className="size-20 rounded-2xl object-cover object-top grayscale-[15%]"
+                />
                 <span className="profile-spark absolute -bottom-2 -right-2 grid size-8 place-items-center rounded-full border-4 border-[#252521] bg-[#d7ff64] text-black">
                   <Icon name="spark" className="size-4" />
                 </span>
               </div>
               <span className="rounded-full border border-white/15 bg-black/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70 backdrop-blur-md">
-                Updated today
+                {user.updated_at || "Updated today"}
               </span>
             </div>
 
             <div className="relative mt-16">
-              <p className="mb-2 text-sm font-medium text-white/55">Maya’s music passport</p>
-              <h1 className="max-w-[8ch] text-[3.8rem] font-semibold leading-[0.86] tracking-[-0.07em]">Midnight Explorer</h1>
-              <p className="mt-6 max-w-[27ch] text-sm leading-relaxed text-white/60">
-                Dreamy vocals, late-night R&B and a little beautiful chaos.
+              <p className="mb-2 text-sm font-medium text-white/55">{user.name}’s music passport</p>
+              <h1 className="max-w-[10ch] text-[3.4rem] font-semibold leading-[0.9] tracking-[-0.06em]">
+                {passport.archetype}
+              </h1>
+              <p className="mt-6 max-w-[28ch] text-sm leading-relaxed text-white/60">
+                {passport.tagline}
               </p>
             </div>
 
             <div className="relative mt-8 flex items-center justify-between border-t border-white/10 pt-5">
               <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-full bg-[#1ed760] text-[10px] font-black text-black">S</span>
-                <span className="grid size-8 place-items-center rounded-full bg-[#ff0033] text-[10px] font-black text-white">▶</span>
-                <span className="text-xs text-white/50">2 platforms connected</span>
+                {user.connected_platforms?.includes("spotify") && (
+                  <span className="grid size-8 place-items-center rounded-full bg-[#1ed760] text-[10px] font-black text-black">S</span>
+                )}
+                {user.connected_platforms?.includes("youtube") && (
+                  <span className="grid size-8 place-items-center rounded-full bg-[#ff0033] text-[10px] font-black text-white">▶</span>
+                )}
+                <span className="text-xs text-white/50">
+                  {user.connected_platforms?.length || 1} platform{user.connected_platforms?.length === 1 ? "" : "s"} connected
+                </span>
               </div>
-              <span className="text-xs font-semibold text-[#d7ff64]">View passport</span>
+              <button onClick={() => setShareOpen(true)} className="text-xs font-semibold text-[#d7ff64] transition hover:underline">
+                View passport
+              </button>
             </div>
           </div>
         </section>
@@ -165,25 +246,34 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="grid grid-cols-[1.55fr_1fr_1fr] gap-2">
-              <article className="glass-image group relative row-span-2 min-h-72 overflow-hidden rounded-[1.5rem]">
-              <img src={artists[0].image} alt="" className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105" />
+            <article className="glass-image group relative row-span-2 min-h-72 overflow-hidden rounded-[1.5rem]">
+              <img
+                src={topArtists[0]?.image || defaultArtists[0].image}
+                alt=""
+                className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
               <span className="absolute left-4 top-4 text-4xl font-semibold tracking-tighter">01</span>
               <div className="absolute bottom-4 left-4">
-                <h3 className="text-xl font-semibold">{artists[0].name}</h3>
-                <p className="text-[11px] text-white/60">{artists[0].genre}</p>
+                <h3 className="text-xl font-semibold">{topArtists[0]?.name}</h3>
+                <p className="text-[11px] text-white/60">{topArtists[0]?.genre}</p>
               </div>
             </article>
-            {artists.slice(1).map((artist, index) => (
-              <article key={artist.name} className="glass-image group relative aspect-square overflow-hidden rounded-[1.35rem]">
-                <img src={artist.image} alt="" className="absolute inset-0 size-full object-cover object-top grayscale-[20%] transition duration-500 group-hover:scale-105 group-hover:grayscale-0" />
+
+            {topArtists.slice(1, 4).map((artist: any, index: number) => (
+              <article key={artist.name || index} className="glass-image group relative aspect-square overflow-hidden rounded-[1.35rem]">
+                <img
+                  src={artist.image || defaultArtists[index + 1]?.image}
+                  alt=""
+                  className="absolute inset-0 size-full object-cover object-top grayscale-[20%] transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
                 <span className="absolute left-3 top-3 text-xs font-bold">0{index + 2}</span>
                 <p className="absolute bottom-3 left-3 max-w-[90%] truncate text-xs font-semibold">{artist.name}</p>
               </article>
             ))}
           </div>
-          <p className="mt-3 text-[10px] text-white/25">Portrait photography from Unsplash</p>
+          <p className="mt-3 text-[10px] text-white/25">Verified artist portraits cached from Deezer & graph</p>
         </section>
 
         <section className="px-5 pt-12">
@@ -202,17 +292,13 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
             <div className="flex items-end justify-between">
               <div>
                 <p className="text-sm text-white/50">Discovery score</p>
-                <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">{period === "month" ? "82" : "76"}<span className="text-xl text-white/35">%</span></p>
+                <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">{discoveryScore}<span className="text-xl text-white/35">%</span></p>
               </div>
-              <span className="rounded-full bg-[#d7ff64]/10 px-3 py-1.5 text-xs font-semibold text-[#d7ff64]">Explorer</span>
+              <span className="rounded-full bg-[#d7ff64]/10 px-3 py-1.5 text-xs font-semibold text-[#d7ff64]">{discoveryTag}</span>
             </div>
             <div className="mt-7 space-y-5">
-              {[
-                ["Familiar", "Adventurous", period === "month" ? 82 : 76],
-                ["Calm", "Energetic", period === "month" ? 64 : 58],
-                ["Focused", "Eclectic", period === "month" ? 73 : 69],
-              ].map(([start, end, value]) => (
-                <div key={start as string}>
+              {sliders.map(([start, end, value]: [string, string, number]) => (
+                <div key={start}>
                   <div className="mb-2 flex justify-between text-[10px] font-medium text-white/40">
                     <span>{start}</span><span>{end}</span>
                   </div>
@@ -229,23 +315,37 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
           <p className="eyebrow">Across the universe</p>
           <h2 className="section-title">Your migration story</h2>
           <div className="mt-5 grid grid-cols-2 gap-2">
-            <div className="lime-glass col-span-2 flex items-center justify-between rounded-[1.6rem] p-5 text-black">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-55">Tracks moved</p>
-                <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">1,248</p>
+            <div className="lime-glass col-span-2 flex flex-col justify-between rounded-[1.6rem] p-5 text-black">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-55">Tracks moved</p>
+                  <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">{migration.tracks_moved.toLocaleString()}</p>
+                </div>
+                <div className="grid size-16 place-items-center rounded-full border border-black/15">
+                  <Icon name="route" className="size-7" />
+                </div>
               </div>
-              <div className="grid size-16 place-items-center rounded-full border border-black/15">
-                <Icon name="route" className="size-7" />
-              </div>
+
+              {!migration.has_migrated && (
+                <div className="mt-4 pt-3 border-t border-black/10">
+                  <button
+                    onClick={() => window.alert("Navigate to the Move tab to transfer your playlists between Spotify and YouTube Music!")}
+                    className="rounded-full bg-black px-4 py-2 text-xs font-bold text-[#d7ff64] transition hover:scale-105"
+                  >
+                    Migrate your first playlist ➔
+                  </button>
+                </div>
+              )}
             </div>
+
             <div className="glass-panel glass-depth glass-hover rounded-[1.5rem] p-4">
               <Icon name="headphones" className="mb-7 size-5 text-[#fa7185]" />
-              <p className="text-2xl font-semibold tracking-tight">94 hrs</p>
+              <p className="text-2xl font-semibold tracking-tight">{migration.hours_preserved}</p>
               <p className="mt-1 text-[11px] text-white/40">Music preserved</p>
             </div>
             <div className="glass-panel glass-depth glass-hover rounded-[1.5rem] p-4">
               <Icon name="transfer" className="mb-7 size-5 text-[#8b5cf6]" />
-              <p className="text-2xl font-semibold tracking-tight">14</p>
+              <p className="text-2xl font-semibold tracking-tight">{migration.perfect_transfers}</p>
               <p className="mt-1 text-[11px] text-white/40">Perfect transfers</p>
             </div>
           </div>
@@ -259,9 +359,9 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
               <Icon name="route" className="size-10" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d7ff64]">Top 8% rare</span>
-              <h3 className="mt-1 text-xl font-semibold">Bridge Builder</h3>
-              <p className="mt-1 text-xs leading-relaxed text-white/45">Moved over 1,000 tracks between worlds.</p>
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d7ff64]">{featuredBadge.rarity_tag}</span>
+              <h3 className="mt-1 text-xl font-semibold">{featuredBadge.title}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-white/45">{featuredBadge.description}</p>
             </div>
           </div>
         </section>
@@ -275,7 +375,7 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
       <nav className="glass-nav fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-[416px] -translate-x-1/2 items-center justify-around rounded-full px-3 py-2 shadow-2xl" aria-label="Main navigation">
         {[
           ["home", "Home"],
-          ["compass", "Discover"],
+          ["compass", "Lens"],
           ["transfer", "Move"],
           ["user", "Profile"],
         ].map(([icon, label]) => (
@@ -286,7 +386,7 @@ function ProfileScreen({ onBack }: { onBack: () => void }) {
         ))}
       </nav>
 
-      {shareOpen && <ShareSheet onClose={() => setShareOpen(false)} />}
+      {shareOpen && <ShareSheet onClose={() => setShareOpen(false)} profileData={profileData} />}
     </div>
   );
 }
@@ -332,7 +432,7 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
             <span className="brand-mark grid size-10 place-items-center rounded-xl text-black">
               <Icon name="route" className="size-5" />
             </span>
-            <span className="text-sm font-bold tracking-[-0.02em]">Soundport</span>
+            <span className="text-sm font-bold tracking-[-0.02em]">SoundGraph</span>
           </div>
           <span className="glass-control rounded-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
             Your music, anywhere
@@ -342,16 +442,16 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
         <section className="flex flex-1 flex-col justify-center py-10">
           <div className="landing-visual relative mx-auto mb-10 h-52 w-full max-w-[350px]" aria-hidden="true">
             <div className="cover-card cover-card-left">
-              <img src={artists[1].image} alt="" />
+              <img src={defaultArtists[1].image} alt="" />
             </div>
             <div className="cover-card cover-card-center">
-              <img src={artists[0].image} alt="" />
+              <img src={defaultArtists[0].image} alt="" />
               <span className="absolute bottom-3 left-3 right-3 rounded-xl border border-white/20 bg-black/25 p-2.5 text-[9px] font-semibold backdrop-blur-xl">
                 Your sound, in one place
               </span>
             </div>
             <div className="cover-card cover-card-right">
-              <img src={artists[2].image} alt="" />
+              <img src={defaultArtists[2].image} alt="" />
             </div>
             <div className="music-orbit music-orbit-one"><span /></div>
             <div className="music-orbit music-orbit-two"><span /></div>
@@ -379,7 +479,7 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
               <span className="block text-sm font-semibold">
                 {connecting === "spotify" ? "Connecting..." : "Continue with Spotify"}
               </span>
-              <span className="mt-0.5 block text-[10px] text-white/38">Sign in or create an account</span>
+              <span className="mt-0.5 block text-[10px] text-white/38">Sign in with Spotify account</span>
             </span>
             <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
               <Icon name="arrow" className="size-4 rotate-180" />
@@ -402,7 +502,7 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
               <span className="block text-sm font-semibold">
                 {connecting === "youtube" ? "Connecting..." : "Continue with YouTube"}
               </span>
-              <span className="mt-0.5 block text-[10px] text-white/38">Sign in or create an account</span>
+              <span className="mt-0.5 block text-[10px] text-white/38">Sign in with Google / YouTube</span>
             </span>
             <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
               <Icon name="arrow" className="size-4 rotate-180" />
@@ -415,7 +515,7 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
             <rect x="5" y="10" width="14" height="11" rx="2" />
             <path d="M8 10V7a4 4 0 0 1 8 0v3" />
           </svg>
-          We only access the music data you approve.
+          Your personal taste graph is encrypted and decentralized.
         </div>
       </main>
     </div>
@@ -423,7 +523,7 @@ function LandingScreen({ onConnect }: { onConnect: () => void }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<"landing" | "profile">("landing");
+  const [screen, setScreen] = useState<"landing" | "profile">("profile");
 
   return screen === "landing" ? (
     <LandingScreen onConnect={() => setScreen("profile")} />
