@@ -22,7 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { Disc3, User } from 'lucide-react-native';
 import { THEME } from './src/theme/theme';
 import { useMobileStore } from './src/store/useMobileStore';
-import { LOCAL_HOST_IP, PORT } from './src/api/config';
+import { PORT, LAN_HOST_IP } from './src/api/config';
 
 import { useState } from 'react';
 import * as Font from 'expo-font';

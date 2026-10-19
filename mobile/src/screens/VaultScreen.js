@@ -14,7 +14,7 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
-import { LOCAL_HOST_IP, PORT } from '../api/config';
+import { LOCAL_HOST_IP, LAN_HOST_IP, PORT } from '../api/config';
 
 export default function VaultScreen({ onOpenAuth }) {
   const {
@@ -115,7 +115,7 @@ export default function VaultScreen({ onOpenAuth }) {
         <View style={styles.diagRow}>
           <Wifi size={15} color="#22C55E" />
           <Text style={styles.diagLabel}>FastAPI LAN Gateway</Text>
-          <Text style={styles.diagValue}>{LOCAL_HOST_IP}:{PORT}</Text>
+          <Text style={styles.diagValue}>{LAN_HOST_IP}:{PORT}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.diagRow}>

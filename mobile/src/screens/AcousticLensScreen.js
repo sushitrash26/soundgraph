@@ -34,11 +34,11 @@ import {
   AlertCircle
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
-import { API_BASE } from '../api/config';
+import { API_BASE, PORT, LAN_HOST_IP } from '../api/config';
 import { useMobileStore } from '../store/useMobileStore';
 
 export default function AcousticLensScreen() {
-  const { user, addCardToDeck } = useMobileStore();
+  const { user, addCardToDeck, getApiBase } = useMobileStore();
 
   const MAX_RECORD_SECONDS = 6;
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -186,22 +186,47 @@ export default function AcousticLensScreen() {
         return;
       }
 
-      // Send to FastAPI base64 endpoint (bypasses React Native multipart FormData bugs)
-      const response = await axios.post(
-        `${API_BASE}/vibe/identify-audio-base64`,
-        {
-          audio_base64: base64Audio,
-          mime_type: 'audio/m4a',
-          user_id: user?.id || undefined,
-        },
-        {
-          timeout: 45000,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+      // Send to FastAPI base64 endpoint (with automatic dynamic LAN IP failover)
+      const primaryBase = (getApiBase && getApiBase()) || API_BASE;
+      const candidates = [
+        primaryBase,
+        `http://${LAN_HOST_IP}:${PORT}`,
+        `http://127.0.0.1:${PORT}`
+      ].filter((v, i, a) => a.indexOf(v) === i);
+
+      let response = null;
+      let lastErr = null;
+
+      for (const base of candidates) {
+        try {
+          response = await axios.post(
+            `${base}/vibe/identify-audio-base64`,
+            {
+              audio_base64: base64Audio,
+              mime_type: 'audio/m4a',
+              user_id: user?.id || undefined,
+            },
+            {
+              timeout: 45000,
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+            }
+          );
+          if (response && response.data) {
+            useMobileStore.setState({ apiBase: base });
+            break;
+          }
+        } catch (postErr) {
+          lastErr = postErr;
+          console.warn(`AcousticLens probe failed on ${base}:`, postErr.message);
         }
-      );
+      }
+
+      if (!response) {
+        throw lastErr || new Error('Could not connect to FastAPI server');
+      }
 
       const data = response.data;
       setIsAnalyzing(false);

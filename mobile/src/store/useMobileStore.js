@@ -87,8 +87,8 @@ export const useMobileStore = create((set, get) => ({
     set({ isConnecting: true, connectionError: null });
     const candidates = [
       get().apiBase,
-      'http://127.0.0.1:8001',
-      'http://192.168.0.6:8001'
+      'http://192.168.0.6:8001',
+      'http://127.0.0.1:8001'
     ].filter(Boolean);
 
     for (const base of candidates) {
