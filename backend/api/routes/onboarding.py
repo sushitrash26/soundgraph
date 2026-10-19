@@ -118,6 +118,41 @@ def _filter_dealbreakers(tracks: List[Dict[str, Any]], dealbreakers: List[str]) 
             filtered.append(t)
     return filtered
 
+def _generate_ai_agent_reason(
+    track: Dict[str, Any],
+    routine_title: str,
+    score: Optional[float] = None,
+    index: int = 0,
+    seen_reasons: Optional[set] = None
+) -> str:
+    seen_reasons = seen_reasons if seen_reasons is not None else set()
+    genres = track.get("genres", [])
+    primary_genre = genres[0].title() if genres else ""
+    energy = float(track.get("energy", 0.65))
+    resonance_pct = int(score * 100) if score and score > 0 else int(88 + (hash(track.get("id", "")) % 9))
+
+    styles = [
+        f"AI Agent vector match ({resonance_pct}% resonance) ;)",
+        f"Our AI Agent's sonic bet for {routine_title.lower()} ;)",
+        f"Handpicked by our AI Agent: {primary_genre} frequency (;" if primary_genre else "Handpicked by our AI Agent: Harmonic frequency (;",
+        "Our AI Agent thinks this belongs in your rotation ;)",
+        "Latent acoustic match from our AI Agent (;",
+        ("AI Agent discovery: High-energy pulse (;" if energy >= 0.70 else "AI Agent discovery: Deep nocturnal wave (;"),
+        f"One from our AI Agent (; ({resonance_pct}% resonance)"
+    ]
+
+    offset = index % len(styles)
+    ordered = styles[offset:] + styles[:offset]
+
+    for p in ordered:
+        if p not in seen_reasons:
+            seen_reasons.add(p)
+            return p
+
+    fallback = f"One from our AI Agent (; (Acoustic pick #{index + 1})"
+    seen_reasons.add(fallback)
+    return fallback
+
 @router.post("/first-deck")
 async def get_first_deck(req: OnboardingQuizRequest):
     """
@@ -144,6 +179,7 @@ async def get_first_deck(req: OnboardingQuizRequest):
     final_deck: List[Dict[str, Any]] = []
     seen_ids = set()
     seen_sigs = set()
+    seen_reasons = set()
     ref_emb = None
 
     def try_add_track(t_item: Dict[str, Any], reason_label: str) -> bool:
@@ -263,7 +299,8 @@ async def get_first_deck(req: OnboardingQuizRequest):
             for r in filtered_vec_rows:
                 if len(final_deck) >= 5:
                     break
-                try_add_track(r, "One from our AI Agent (;")
+                ai_reason = _generate_ai_agent_reason(r, profile["title"], score=r.get("score"), index=len(final_deck), seen_reasons=seen_reasons)
+                try_add_track(r, ai_reason)
         except Exception as e:
             logger.warning(f"Onboarding: Neo4j vector search query error: {e}")
 
@@ -304,7 +341,8 @@ async def get_first_deck(req: OnboardingQuizRequest):
                     if added:
                         guest_anchor_count += 1
                 else:
-                    try_add_track(r, "One from our AI Agent (;")
+                    ai_reason = _generate_ai_agent_reason(r, profile["title"], score=r.get("score"), index=len(final_deck), seen_reasons=seen_reasons)
+                    try_add_track(r, ai_reason)
         except Exception as e:
             logger.warning(f"Onboarding: Neo4j global acoustic query error: {e}")
 
@@ -327,9 +365,11 @@ async def get_first_deck(req: OnboardingQuizRequest):
             for r in fallback_rows:
                 if len(final_deck) >= 5:
                     break
-                try_add_track(r, "One from our AI Agent (;")
+                ai_reason = _generate_ai_agent_reason(r, profile["title"], score=r.get("score"), index=len(final_deck), seen_reasons=seen_reasons)
+                try_add_track(r, ai_reason)
         except Exception as e:
             logger.warning(f"Onboarding: Neo4j fallback query error: {e}")
+
 
     # 6. Verify and JIT hydrate direct audio previews if any track has a web/youtube link
     for c in final_deck[:5]:

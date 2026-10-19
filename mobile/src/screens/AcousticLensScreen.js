@@ -523,6 +523,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 22,
     paddingVertical: 20,
+    paddingBottom: 120,
     alignItems: 'center'
   },
   header: {

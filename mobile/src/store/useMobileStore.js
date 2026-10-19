@@ -12,7 +12,7 @@ export const useMobileStore = create((set, get) => ({
   backendConnected: false,
   isConnecting: false,
   connectionError: null,
-  currentTab: 'recommendations', // 'recommendations' | 'migration' | 'profile'
+  currentTab: 'recommendations', // 'recommendations' | 'lens' | 'migration' | 'profile'
   setCurrentTab: (tab) => set({ currentTab: tab }),
 
   // Onboarding Flow State: 'auth' | 'quiz' | 'first_deck' | 'milestone' | 'main'

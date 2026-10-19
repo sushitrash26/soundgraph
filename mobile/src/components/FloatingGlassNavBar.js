@@ -2,14 +2,14 @@ import React from 'react';
 import { StyleSheet, View, Text, Pressable, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import { Home, Compass, ArrowLeftRight, User } from 'lucide-react-native';
+import { Home, Radio, ArrowLeftRight, User } from 'lucide-react-native';
 import { useMobileStore } from '../store/useMobileStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TABS = [
   { id: 'recommendations', label: 'Home', icon: Home },
-  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'lens', label: 'Lens', icon: Radio },
   { id: 'migration', label: 'Move', icon: ArrowLeftRight },
   { id: 'profile', label: 'Profile', icon: User }
 ];
@@ -18,10 +18,9 @@ export default function FloatingGlassNavBar() {
   const { currentTab, setCurrentTab } = useMobileStore();
 
   const handleTabPress = (tabId) => {
-    const targetTab = tabId === 'discover' ? 'recommendations' : tabId;
-    if (currentTab !== targetTab) {
+    if (currentTab !== tabId) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setCurrentTab(targetTab);
+      setCurrentTab(tabId);
     }
   };
 
@@ -30,7 +29,7 @@ export default function FloatingGlassNavBar() {
       <BlurView intensity={85} tint="dark" style={styles.pillBlur}>
         <View style={styles.tabsRow}>
           {TABS.map((tab) => {
-            const isActive = tab.id === 'discover' ? false : currentTab === tab.id;
+            const isActive = currentTab === tab.id;
             const IconComponent = tab.icon;
 
             return (

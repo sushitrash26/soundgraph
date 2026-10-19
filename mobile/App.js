@@ -38,6 +38,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import TasteQuizScreen from './src/screens/TasteQuizScreen';
 import FirstDeckScreen from './src/screens/FirstDeckScreen';
 import InfiniteDeckScreen from './src/screens/InfiniteDeckScreen';
+import AcousticLensScreen from './src/screens/AcousticLensScreen';
 import MigrationScreen from './src/screens/MigrationScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import FloatingGlassNavBar from './src/components/FloatingGlassNavBar';
@@ -111,6 +112,7 @@ export default function App() {
     return (
       <View style={styles.screenContainer}>
         {currentTab === 'recommendations' && <InfiniteDeckScreen />}
+        {currentTab === 'lens' && <AcousticLensScreen />}
         {currentTab === 'migration' && <MigrationScreen />}
         {currentTab === 'profile' && <ProfileScreen />}
       </View>
