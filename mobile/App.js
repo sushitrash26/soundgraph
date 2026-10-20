@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,20 +17,15 @@ LogBox.ignoreLogs([
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  FadeInRight,
-  FadeInLeft,
-  FadeOutLeft,
-  FadeOutRight
-} from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Disc3, User } from 'lucide-react-native';
 import { THEME } from './src/theme/theme';
 import { useMobileStore } from './src/store/useMobileStore';
-import { loadAsync } from 'expo-font';
+import { PORT, LAN_HOST_IP } from './src/api/config';
+
+import { useState } from 'react';
+import * as Font from 'expo-font';
 import {
   DMSans_400Regular,
   DMSans_500Medium,
@@ -49,8 +44,6 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import FloatingGlassNavBar from './src/components/FloatingGlassNavBar';
 import AmbientGlassBackground from './src/components/AmbientGlassBackground';
 
-const TAB_ORDER = ['recommendations', 'lens', 'migration', 'profile'];
-
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
@@ -68,22 +61,10 @@ export default function App() {
     closeAuthModal
   } = useMobileStore();
 
-  const prevTabRef = useRef(currentTab);
-  const [navDirection, setNavDirection] = useState('forward'); // 'forward' | 'backward'
-
-  useEffect(() => {
-    const prevIdx = TAB_ORDER.indexOf(prevTabRef.current);
-    const currIdx = TAB_ORDER.indexOf(currentTab);
-    if (currIdx !== prevIdx && prevIdx >= 0 && currIdx >= 0) {
-      setNavDirection(currIdx > prevIdx ? 'forward' : 'backward');
-      prevTabRef.current = currentTab;
-    }
-  }, [currentTab]);
-
   useEffect(() => {
     async function prepare() {
       try {
-        await loadAsync({
+        await Font.loadAsync({
           DMSans_400Regular,
           DMSans_500Medium,
           DMSans_600SemiBold,
@@ -104,98 +85,36 @@ export default function App() {
   }
 
   const init = async () => {
-    try {
-      const ok = await checkBackendConnection();
-      if (ok) {
-        const state = useMobileStore.getState();
-        if (state.isAuthenticated && state.user && state.onboardingStep === 'auth') {
-          state.setOnboardingStep('quiz');
-        }
-        if (state.fetchPlatformData) {
-          await Promise.allSettled([
-            state.fetchPlatformData('youtube'),
-            state.fetchPlatformData('spotify')
-          ]);
-        }
+    const ok = await checkBackendConnection();
+    if (ok) {
+      const state = useMobileStore.getState();
+      if (state.isAuthenticated && state.user && state.onboardingStep === 'auth') {
+        state.setOnboardingStep('quiz');
       }
-    } catch (err) {
-      console.warn('App init exception:', err);
+      await Promise.all([
+        fetchPlatformData('youtube'),
+        fetchPlatformData('spotify')
+      ]);
     }
   };
 
   const renderActiveScreen = () => {
     if (!isAuthenticated || onboardingStep === 'auth') {
-      return (
-        <Animated.View key="auth" style={styles.screenContainer} entering={FadeIn.duration(250)} exiting={FadeOutLeft.duration(200)}>
-          <LoginScreen />
-        </Animated.View>
-      );
+      return <LoginScreen />;
     }
     if (onboardingStep === 'quiz') {
-      return (
-        <Animated.View key="quiz" style={styles.screenContainer} entering={FadeInRight.duration(280).springify().damping(19)} exiting={FadeOutLeft.duration(200)}>
-          <TasteQuizScreen />
-        </Animated.View>
-      );
+      return <TasteQuizScreen />;
     }
     if (onboardingStep === 'first_deck' || onboardingStep === 'milestone') {
-      return (
-        <Animated.View key="first_deck" style={styles.screenContainer} entering={FadeInRight.duration(280).springify().damping(19)} exiting={FadeOut.duration(200)}>
-          <FirstDeckScreen />
-        </Animated.View>
-      );
+      return <FirstDeckScreen />;
     }
-
-    const enterAnim = navDirection === 'forward'
-      ? FadeInRight.duration(260).springify().damping(19).stiffness(190)
-      : FadeInLeft.duration(260).springify().damping(19).stiffness(190);
-
-    const exitAnim = navDirection === 'forward'
-      ? FadeOutLeft.duration(180)
-      : FadeOutRight.duration(180);
 
     return (
       <View style={styles.screenContainer}>
-        {currentTab === 'recommendations' && (
-          <Animated.View
-            key="recommendations"
-            style={StyleSheet.absoluteFillObject}
-            entering={enterAnim}
-            exiting={exitAnim}
-          >
-            <InfiniteDeckScreen />
-          </Animated.View>
-        )}
-        {currentTab === 'lens' && (
-          <Animated.View
-            key="lens"
-            style={StyleSheet.absoluteFillObject}
-            entering={enterAnim}
-            exiting={exitAnim}
-          >
-            <AcousticLensScreen />
-          </Animated.View>
-        )}
-        {currentTab === 'migration' && (
-          <Animated.View
-            key="migration"
-            style={StyleSheet.absoluteFillObject}
-            entering={enterAnim}
-            exiting={exitAnim}
-          >
-            <MigrationScreen />
-          </Animated.View>
-        )}
-        {currentTab === 'profile' && (
-          <Animated.View
-            key="profile"
-            style={StyleSheet.absoluteFillObject}
-            entering={enterAnim}
-            exiting={exitAnim}
-          >
-            <ProfileScreen />
-          </Animated.View>
-        )}
+        {currentTab === 'recommendations' && <InfiniteDeckScreen />}
+        {currentTab === 'lens' && <AcousticLensScreen />}
+        {currentTab === 'migration' && <MigrationScreen />}
+        {currentTab === 'profile' && <ProfileScreen />}
       </View>
     );
   };

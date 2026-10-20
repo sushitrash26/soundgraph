@@ -29,7 +29,6 @@ import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
-import Animated, { FadeInRight } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -212,82 +211,75 @@ export default function TasteQuizScreen() {
         </View>
       </View>
 
-      {/* Animated Step Content (Question + Options) */}
-      <Animated.View
-        key={currentQuestion.id}
-        style={{ width: '100%' }}
-        entering={FadeInRight.duration(240).springify().damping(18)}
-      >
-        {/* Main Question & Subtitle */}
-        <View style={styles.questionSection}>
-          <Text style={styles.questionTitle}>{currentQuestion.title}</Text>
-          <Text style={styles.questionSubtitle}>{currentQuestion.subtitle}</Text>
-        </View>
+      {/* Main Question & Subtitle */}
+      <View style={styles.questionSection}>
+        <Text style={styles.questionTitle}>{currentQuestion.title}</Text>
+        <Text style={styles.questionSubtitle}>{currentQuestion.subtitle}</Text>
+      </View>
 
-        {/* Translucent Frosted Glass Option Tiles */}
-        <View style={styles.optionsList}>
-          {currentQuestion.options.map((option) => {
-            const selected = isOptionSelected(option.id);
-            const IconComponent = option.icon;
+      {/* Translucent Frosted Glass Option Tiles */}
+      <View style={styles.optionsList}>
+        {currentQuestion.options.map((option) => {
+          const selected = isOptionSelected(option.id);
+          const IconComponent = option.icon;
 
-            return (
-              <Pressable
-                key={option.id}
-                style={({ pressed }) => [
-                  styles.optionTile,
-                  selected && styles.optionTileSelected,
-                  pressed && styles.tilePressed
+          return (
+            <Pressable
+              key={option.id}
+              style={({ pressed }) => [
+                styles.optionTile,
+                selected && styles.optionTileSelected,
+                pressed && styles.tilePressed
+              ]}
+              onPress={() => handleSelectOption(option.id)}
+            >
+              <BlurView
+                intensity={selected ? 85 : 65}
+                tint="light"
+                style={[
+                  styles.optionBlur,
+                  selected && styles.optionBlurSelected
                 ]}
-                onPress={() => handleSelectOption(option.id)}
               >
-                <BlurView
-                  intensity={selected ? 85 : 65}
-                  tint="light"
-                  style={[
-                    styles.optionBlur,
-                    selected && styles.optionBlurSelected
-                  ]}
-                >
-                  <View style={styles.optionRow}>
-                    <View
+                <View style={styles.optionRow}>
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      selected && styles.iconCircleSelected
+                    ]}
+                  >
+                    <IconComponent
+                      size={20}
+                      color={selected ? '#FFFFFF' : 'rgba(255, 255, 255, 0.75)'}
+                      strokeWidth={2}
+                    />
+                  </View>
+
+                  <View style={styles.optionContentCol}>
+                    <Text
                       style={[
-                        styles.iconCircle,
-                        selected && styles.iconCircleSelected
+                        styles.optionLabel,
+                        selected && styles.optionLabelSelected
                       ]}
                     >
-                      <IconComponent
-                        size={20}
-                        color={selected ? '#FFFFFF' : 'rgba(255, 255, 255, 0.75)'}
-                        strokeWidth={2}
-                      />
-                    </View>
-
-                    <View style={styles.optionContentCol}>
-                      <Text
-                        style={[
-                          styles.optionLabel,
-                          selected && styles.optionLabelSelected
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                      {option.hint && (
-                        <Text style={styles.optionHint}>{option.hint}</Text>
-                      )}
-                    </View>
-
-                    {selected && (
-                      <View style={styles.checkIndicator}>
-                        <CheckCircle2 size={19} color="#FFFFFF" />
-                      </View>
+                      {option.label}
+                    </Text>
+                    {option.hint && (
+                      <Text style={styles.optionHint}>{option.hint}</Text>
                     )}
                   </View>
-                </BlurView>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Animated.View>
+
+                  {selected && (
+                    <View style={styles.checkIndicator}>
+                      <CheckCircle2 size={19} color="#FFFFFF" />
+                    </View>
+                  )}
+                </View>
+              </BlurView>
+            </Pressable>
+          );
+        })}
+      </View>
 
       {/* Bottom Solid White Action Button */}
       <View style={styles.bottomSection}>
