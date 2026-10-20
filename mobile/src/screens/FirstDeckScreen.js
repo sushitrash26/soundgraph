@@ -18,6 +18,7 @@ import {
 import { useSharedValue } from 'react-native-reanimated';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 import OnboardingMilestoneModal from '../components/OnboardingMilestoneModal';
 import ThreeDDeckCard from '../components/ThreeDDeckCard';
@@ -25,6 +26,7 @@ import ThreeDDeckCard from '../components/ThreeDDeckCard';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function FirstDeckScreen() {
+  const insets = useSafeAreaInsets();
   const {
     firstDeckCards,
     currentFirstDeckIndex,
@@ -55,7 +57,13 @@ export default function FirstDeckScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      {
+        paddingTop: Math.max(insets.top + 6, 16),
+        paddingBottom: Math.max(insets.bottom + 16, 28)
+      }
+    ]}>
       <AmbientGlassBackground />
 
       {/* Top Floating Glass Header Pill */}
@@ -173,7 +181,7 @@ export default function FirstDeckScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E0C0B',
+    backgroundColor: 'transparent',
     justifyContent: 'space-between',
     paddingTop: 16,
     paddingBottom: 28

@@ -2,7 +2,7 @@ import math
 import time
 import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from backend.core.cache import UnifiedCache
 from backend.core.logger import logger
 
@@ -14,7 +14,7 @@ ARM_NAMES = {
 }
 
 NUM_ARMS = 4
-CONTEXT_DIM = 6
+CONTEXT_DIM = 7  # QW5: explicit intercept (x0=1.0) + sin_hour + cos_hour + depth + valence + energy + entropy
 DEFAULT_ALPHA = 0.5  # Exploration coefficient
 
 class ContextualLinUCB:
@@ -22,6 +22,9 @@ class ContextualLinUCB:
     Contextual Multi-Armed Bandit (LinUCB with Disjoint Linear Models):
     Replaces static heuristic ranking with continuous, real-time reinforcement learning.
     
+    QW5: 7-dimensional context vector with explicit intercept x0=1.0 and user-local timezone.
+    QW6: Deduplicates updates so each impression yields exactly one reward update.
+
     Mathematical Formulation:
     - Expected Reward: hat_theta_a = A_a^(-1) * b_a
     - Upper Confidence Bound: UCB_a = hat_theta_a^T * x + alpha * sqrt(x^T * A_a^(-1) * x)
@@ -37,11 +40,17 @@ class ContextualLinUCB:
         session_depth: int = 1,
         prev_valence: float = 0.5,
         prev_energy: float = 0.5,
-        persona_entropy: float = 0.5
+        persona_entropy: float = 0.5,
+        tz_offset_minutes: Optional[int] = None
     ) -> np.ndarray:
-        """Constructs normalized 6-dimensional context vector x in [-1, 1]"""
+        """Constructs normalized 7-dimensional context vector x with explicit intercept x0=1.0"""
         if hour is None:
-            hour = datetime.now().hour
+            now_utc = datetime.now(timezone.utc)
+            if tz_offset_minutes is not None:
+                local_time = now_utc + timedelta(minutes=tz_offset_minutes)
+                hour = local_time.hour
+            else:
+                hour = now_utc.hour
 
         rad = 2.0 * math.pi * (hour / 24.0)
         sin_hour = math.sin(rad)
@@ -51,7 +60,25 @@ class ContextualLinUCB:
         e = (float(prev_energy) - 0.5) * 2.0
         ent = (float(persona_entropy) - 0.5) * 2.0
 
-        return np.array([sin_hour, cos_hour, norm_depth, v, e, ent], dtype=np.float64)
+        # QW5: explicit intercept x0 = 1.0 prevents origin-forcing bias in ridge regression
+        return np.array([1.0, sin_hour, cos_hour, norm_depth, v, e, ent], dtype=np.float64)
+
+    @classmethod
+    def should_apply_reward(cls, impression_id: Optional[str]) -> bool:
+        """
+        QW6: Deduplicates updates so each impression yields exactly one bandit update.
+        Returns True if the impression has not been rewarded yet (and marks it rewarded),
+        or True if impression_id is None (legacy non-impression updates).
+        """
+        if not impression_id:
+            return True
+        cache_key = f"bandit:rewarded:{impression_id}"
+        already_rewarded = UnifiedCache.get(cache_key)
+        if already_rewarded:
+            logger.info(f"QW6 Deduplication: Dropped duplicate bandit update for impression {impression_id}")
+            return False
+        UnifiedCache.set(cache_key, 1, ttl=86400 * 7)
+        return True
 
     @classmethod
     def _load_arm_state(cls, user_id: str, arm: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -138,7 +165,8 @@ class ContextualLinUCB:
         user_id: str,
         arm: int,
         x: np.ndarray,
-        reward: float
+        reward: float,
+        impression_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Online Ridge Regression Update:
@@ -147,6 +175,9 @@ class ContextualLinUCB:
         """
         if arm < 0 or arm >= NUM_ARMS:
             return {"status": "ignored", "reason": "invalid_arm"}
+
+        if impression_id and not cls.should_apply_reward(impression_id):
+            return {"status": "ignored", "reason": "duplicate_impression_reward"}
 
         A, b = cls._load_arm_state(user_id, arm)
         # Outer product x * x^T

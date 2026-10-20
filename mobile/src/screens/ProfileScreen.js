@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -66,6 +67,7 @@ const FEATURED_ARTISTS = [
 ];
 
 export default function ProfileScreen({ onOpenAuth }) {
+  const insets = useSafeAreaInsets();
   const {
     user,
     authStatus,
@@ -276,7 +278,13 @@ export default function ProfileScreen({ onOpenAuth }) {
       <Animated.View style={[styles.ambientOrbLime, ambientOrbStyle]} pointerEvents="none" />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 6, 16),
+            paddingBottom: Math.max(insets.bottom + 90, 110)
+          }
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Top Editorial Header Bar (Directly from Figma) */}
@@ -773,7 +781,7 @@ export default function ProfileScreen({ onOpenAuth }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A09'
+    backgroundColor: 'transparent'
   },
   scrollContent: {
     paddingHorizontal: 20,

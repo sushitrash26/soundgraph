@@ -29,11 +29,13 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function MigrationScreen() {
+  const insets = useSafeAreaInsets();
   const {
     youtubePlaylists,
     spotifyPlaylists,
@@ -103,7 +105,13 @@ export default function MigrationScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      {
+        paddingTop: Math.max(insets.top + 6, 12),
+        paddingBottom: Math.max(insets.bottom + 80, 90)
+      }
+    ]}>
       <AmbientGlassBackground />
 
       {/* Top Segmented Direction Switcher (Reference image [ Living room ] [ Kitchen ] style) */}
@@ -383,7 +391,7 @@ export default function MigrationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E0C0B',
+    backgroundColor: 'transparent',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 90

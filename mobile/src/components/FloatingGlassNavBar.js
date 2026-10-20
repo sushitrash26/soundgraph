@@ -4,6 +4,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Home, Radio, ArrowLeftRight, User } from 'lucide-react-native';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -15,6 +16,7 @@ const TABS = [
 ];
 
 export default function FloatingGlassNavBar() {
+  const insets = useSafeAreaInsets();
   const { currentTab, setCurrentTab } = useMobileStore();
 
   const handleTabPress = (tabId) => {
@@ -25,7 +27,13 @@ export default function FloatingGlassNavBar() {
   };
 
   return (
-    <View style={styles.floatingContainer} pointerEvents="box-none">
+    <View
+      style={[
+        styles.floatingContainer,
+        { bottom: Math.max(insets.bottom + 8, 16) }
+      ]}
+      pointerEvents="box-none"
+    >
       <BlurView intensity={85} tint="dark" style={styles.pillBlur}>
         <View style={styles.tabsRow}>
           {TABS.map((tab) => {

@@ -295,36 +295,27 @@ class GeminiEmbedder:
     @classmethod
     def infer_acoustic_features_from_embedding(cls, vec: List[float]) -> Dict[str, float]:
         """
-        Semantic Differential Latent Axis Projection:
-        Zero hardcoded numbers. Computes continuous acoustic features [0.05, 0.98]
-        directly from any 768-D Gemini vector by projecting onto continuous bipolar concept axes.
+        Calibrated Multi-Anchor Ensemble Acoustic Inference (W5 Part A):
+        Computes continuous acoustic features [0.05, 0.98] directly from any 768-D Gemini vector
+        using multi-anchor ensemble differentials verified against Spotify ground truth.
         """
         import numpy as np
         if not vec or len(vec) != TARGET_DIMENSIONS:
             return {"energy": 0.50, "valence": 0.50, "danceability": 0.50, "acousticness": 0.30}
 
-        v = np.array(vec, dtype=np.float32)
-        v_norm = np.linalg.norm(v)
-        if v_norm == 0:
+        try:
+            from backend.services.feature_calibrator import FeatureCalibrator
+            raw_scores = FeatureCalibrator.compute_raw_scores(vec)
+            features = {}
+            for feat in ["energy", "valence", "danceability", "acousticness"]:
+                raw = raw_scores.get(f"{feat}_raw", 0.0)
+                # Calibrated logistic mapping mapping raw differential to [0.05, 0.95]
+                prob = 1.0 / (1.0 + float(np.exp(-4.0 * raw)))
+                features[feat] = round(float(np.clip(prob, 0.05, 0.95)), 2)
+            return features
+        except Exception as e:
+            logger.warning(f"Error in ensemble acoustic inference: {e}")
             return {"energy": 0.50, "valence": 0.50, "danceability": 0.50, "acousticness": 0.30}
-        v = v / v_norm
-
-        anchors = cls._get_axis_anchors()
-        features = {}
-
-        for axis_name, (pos_vec, neg_vec) in anchors.items():
-            if not pos_vec or not neg_vec:
-                features[axis_name] = 0.50
-                continue
-            p = np.array(pos_vec, dtype=np.float32) / np.linalg.norm(pos_vec)
-            n = np.array(neg_vec, dtype=np.float32) / np.linalg.norm(neg_vec)
-            
-            diff = float(np.dot(v, p) - np.dot(v, n))
-            # Smooth sigmoid/linear mapping from differential to [0.05, 0.98]
-            val = round(float(np.clip(0.50 + 1.35 * diff, 0.05, 0.98)), 2)
-            features[axis_name] = val
-
-        return features
 
     @classmethod
     def infer_genres_from_embedding(cls, vec: List[float], top_k: int = 3, min_sim: float = 0.65) -> List[str]:
@@ -365,30 +356,18 @@ class GeminiEmbedder:
     @classmethod
     def build_track_semantic_description(cls, track: Dict[str, Any]) -> str:
         """
-        Creates a rich, dense semantic descriptor for embedding.
-        Continuous natural language synthesis without arbitrary step-threshold buckets.
+        Creates a rich, clean semantic descriptor for embedding (Embedding Text v2).
+        Eliminates circular numeric feature strings (F-21).
+        Format: '{title} by {artists}. Album: {album}. Genres and tags: {genres}.'
         """
         name = track.get("name") or track.get("title") or "Unknown Track"
         artists = ", ".join(track.get("artists") or ["Artist"])
         album = track.get("album", "")
         genres = ", ".join(track.get("genres") or [])
-        features = track.get("features") or {}
 
-        # Continuous natural verbalization
-        acoustic_parts = []
-        if "energy" in features and features["energy"] is not None:
-            acoustic_parts.append(f"energy intensity: {float(features['energy']):.2f}")
-        if "valence" in features and features["valence"] is not None:
-            acoustic_parts.append(f"mood valence: {float(features['valence']):.2f}")
-        if "danceability" in features and features["danceability"] is not None:
-            acoustic_parts.append(f"danceable groove: {float(features['danceability']):.2f}")
-        if "acousticness" in features and features["acousticness"] is not None:
-            acoustic_parts.append(f"acoustic resonance: {float(features['acousticness']):.2f}")
-
-        notes_str = "; ".join(acoustic_parts) if acoustic_parts else "balanced dynamics"
         album_str = f" Album: {album}." if album else ""
-        genre_str = f" Genre elements: {genres}." if genres else ""
-        return f"Track: {name}. Artists: {artists}.{album_str}{genre_str} Acoustic profile: {notes_str}."
+        genre_str = f" Genres and tags: {genres}." if genres else ""
+        return f"{name} by {artists}.{album_str}{genre_str}".strip()
 
     @classmethod
     async def embed_tracks_batch(cls, tracks: List[Dict[str, Any]]) -> Dict[str, List[float]]:

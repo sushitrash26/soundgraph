@@ -36,8 +36,10 @@ import {
 import { THEME } from '../theme/theme';
 import { API_BASE, PORT, LAN_HOST_IP } from '../api/config';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AcousticLensScreen() {
+  const insets = useSafeAreaInsets();
   const { user, addCardToDeck, getApiBase } = useMobileStore();
 
   const MAX_RECORD_SECONDS = 6;
@@ -259,7 +261,17 @@ export default function AcousticLensScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: Math.max(insets.top + 6, 20),
+          paddingBottom: Math.max(insets.bottom + 80, 100)
+        }
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Acoustic Lens</Text>
@@ -543,12 +555,11 @@ export default function AcousticLensScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1
+    flex: 1,
+    backgroundColor: 'transparent'
   },
   content: {
     paddingHorizontal: 22,
-    paddingVertical: 20,
-    paddingBottom: 120,
     alignItems: 'center'
   },
   header: {

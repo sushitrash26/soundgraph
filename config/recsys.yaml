@@ -1,0 +1,124 @@
+# SoundGraph Recommendation System Configuration (Single Source of Truth)
+# Version: 1.0.0
+
+config_version: "1.0.0"
+
+previews:
+  match_accept: 0.80
+  match_low: 0.60
+  reverify_days: 14
+  min_bytes: 100000
+  low_confidence_policy: hidden   # hidden | show_no_learn | show
+  allowed_hosts:
+    - "audio-ssl.itunes.apple.com"
+    - "cdns-preview-*.dzcdn.net"
+    - "p.scdn.co"
+  itunes_rate_limit_per_min: 20
+
+personas:
+  k_max: 4
+  min_cluster_weight: 0.10
+  min_cluster_tracks: 5
+  stability_ari_min: 0.6
+  pc_cap: 50
+  recency_tau_days: 120
+  liked_boost: 1.5
+  medoids_per_persona: 3
+  time_affinity_alpha: 5
+  taste_refresh_events: 10
+  session:
+    eta_like: 0.3
+    eta_dislike: 0.15
+    gamma_query: 0.5
+  negative_memory:
+    max_vectors: 50
+    cos_threshold: 0.75
+    artist_halflife_days: 30
+  resurface:
+    min_play_count: 3
+    min_days_since_played: 45
+
+retrieval:
+  k_fetch_min: 200
+  k_fetch_multiplier: 10
+  k_fetch_max: 2000
+  survivor_target_multiple: 3
+  source_timeout_ms: 60
+  rrf_k: 60
+  rrf_weights:
+    persona_text: 1.0
+    session_seed: 1.2
+    persona_audio: 1.0
+    artist_expansion: 0.6
+    co_listened: 0.6
+    genre_popular: 0.3
+
+ranking:
+  weights:
+    sim_persona: 1.00
+    sim_session: 0.80
+    pop_pct: 0.30
+    novelty_by_arm:
+      exploit: 0.0
+      adjacent: 0.2
+      explore_band: 0.6
+      resurface: 0.0
+    mood_match: 0.20
+    source_prior: 0.10
+    dislike_penalty: -0.80
+    artist_repeat: -0.30
+    preview_confidence: -0.50
+
+diversity:
+  deck_size: 15
+  mmr_lambda: 0.7
+  same_artist_sim_bonus: 0.5
+  max_per_artist: 2
+  max_share_per_persona: 0.5
+  explore_band_percentiles: [35, 75]
+  explore_min_pop_pct: 0.30
+  explore_positions: [5, 9, 13]
+  flow_chainer_enabled: false
+
+exploration:
+  stage: 0                       # 0 = randomised priors, 1 = Thompson, 2 = pooled LinUCB
+  arm_priors:
+    exploit: 0.55
+    adjacent: 0.20
+    explore_band: 0.15
+    resurface: 0.10
+  epsilon_floor: 0.05
+  max_explore_share: 0.30
+  novelty_multiplier: 0.5
+  resurface_value: 0.5
+  thompson_kappa: 10
+  linucb:
+    gamma: 0.995
+    lambda: 1.0
+    alpha_pref:
+      familiar: 0.15
+      balanced: 0.5
+      adventurous: 1.2
+  safety:
+    consecutive_negatives: 3
+    forced_exploit_slots: 3
+  reward_map:
+    like: 1.0
+    completed_15s: 0.7
+    dwell_5_15s: 0.4
+    dwell_3_5s: 0.1
+    early_skip: 0.0
+    dislike: 0.0
+
+catalog:
+  per_artist_top: 5
+  per_artist_deep_cuts: 2
+  crawl_depth: 2
+  aura_alert_pct: [70, 80]
+
+evaluation:
+  split: temporal
+  train_frac: 0.8
+  min_test_items: 10
+  bootstrap_resamples: 1000
+  ci_regression_gate_pct: 2

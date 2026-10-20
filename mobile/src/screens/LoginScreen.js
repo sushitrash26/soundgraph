@@ -37,6 +37,7 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -78,6 +79,7 @@ function YouTubeIcon({ size = 24, color = '#FFFFFF' }) {
 }
 
 export default function LoginScreen({ onClose }) {
+  const insets = useSafeAreaInsets();
   const {
     user,
     isAuthenticated,
@@ -408,7 +410,13 @@ export default function LoginScreen({ onClose }) {
       )}
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 6, 20),
+            paddingBottom: Math.max(insets.bottom + 20, 36)
+          }
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -704,7 +712,7 @@ export default function LoginScreen({ onClose }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#080908'
+    backgroundColor: 'transparent'
   },
   concentricWatermark: {
     position: 'absolute',

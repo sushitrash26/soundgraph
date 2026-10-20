@@ -19,12 +19,14 @@ import {
 import { useSharedValue } from 'react-native-reanimated';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 import ThreeDDeckCard from '../components/ThreeDDeckCard';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function InfiniteDeckScreen() {
+  const insets = useSafeAreaInsets();
   const {
     infiniteDeck,
     infiniteIndex,
@@ -61,7 +63,13 @@ export default function InfiniteDeckScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      {
+        paddingTop: Math.max(insets.top + 6, 14),
+        paddingBottom: Math.max(insets.bottom + 80, 94)
+      }
+    ]}>
       <AmbientGlassBackground />
 
       {/* Top Floating Glass Status Header */}
@@ -166,7 +174,7 @@ export default function InfiniteDeckScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E0C0B',
+    backgroundColor: 'transparent',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 10,

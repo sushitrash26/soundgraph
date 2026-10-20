@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { useMobileStore } from '../store/useMobileStore';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AmbientGlassBackground from '../components/AmbientGlassBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -72,6 +73,7 @@ const QUESTIONS = [
 ];
 
 export default function TasteQuizScreen() {
+  const insets = useSafeAreaInsets();
   const {
     submitVibeQuiz,
     isLoadingFirstDeck,
@@ -154,7 +156,13 @@ export default function TasteQuizScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      {
+        paddingTop: Math.max(insets.top + 6, 16),
+        paddingBottom: Math.max(insets.bottom + 16, 24)
+      }
+    ]}>
       <AmbientGlassBackground />
 
       {/* Top Header & Reference-Image Style Pill Switcher */}
@@ -297,11 +305,11 @@ export default function TasteQuizScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E0C0B',
+    backgroundColor: 'transparent',
     justifyContent: 'space-between',
     paddingHorizontal: 22,
-    paddingTop: 54,
-    paddingBottom: 36
+    paddingTop: 16,
+    paddingBottom: 24
   },
   topHeader: {
     marginBottom: 12

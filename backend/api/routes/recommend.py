@@ -21,6 +21,7 @@ class FeedbackRequest(BaseModel):
     user_id: Optional[str] = None
     track_id: str
     reward: float  # +1.0 for like, -1.0 for dislike
+    impression_id: Optional[str] = None
 
 class ChatRequest(BaseModel):
     user_id: Optional[str] = None
@@ -47,6 +48,21 @@ class DwellTelemetryRequest(BaseModel):
     explicit_action: Optional[float] = None
     session_depth: int = 1
     hour: Optional[int] = None
+    impression_id: Optional[str] = None
+    tz_offset_minutes: Optional[int] = None
+
+class EventItem(BaseModel):
+    event_id: Optional[str] = None
+    impression_id: Optional[str] = None
+    user_id: Optional[str] = None
+    track_id: str
+    type: str  # impression, dwell_threshold, completion, like, dislike, skip, share, save
+    value_ms: Optional[int] = None
+    client_ts: Optional[str] = None
+    app_version: Optional[str] = "1.0.0"
+
+class BatchEventsRequest(BaseModel):
+    events: List[EventItem]
 
 @router.get("/user/taste-profile")
 def get_user_taste_profile(user_id: Optional[str] = Query(None)):
@@ -72,24 +88,77 @@ def get_recommendations(
 @router.post("/feedback")
 def record_feedback(payload: FeedbackRequest):
     uid = resolve_uid(payload.user_id)
-    return GraphQueries.record_feedback(
+    res = GraphQueries.record_feedback(
         user_id=uid,
         track_id=payload.track_id,
         reward=payload.reward
     )
+    try:
+        from backend.services.event_logger import EventLogger
+        ev_type = "like" if payload.reward > 0 else "dislike"
+        EventLogger.get_instance().log_events([{
+            "impression_id": payload.impression_id,
+            "user_id": uid,
+            "track_id": payload.track_id,
+            "type": ev_type,
+            "value_ms": None
+        }])
+    except Exception:
+        pass
+    return res
 
 @router.post("/telemetry/dwell")
 def record_dwell_telemetry(payload: DwellTelemetryRequest):
     uid = resolve_uid(payload.user_id)
-    return GraphQueries.record_dwell_telemetry(
+    res = GraphQueries.record_dwell_telemetry(
         user_id=uid,
         track_id=payload.track_id,
         arm=payload.arm or 0,
         dwell_ms=payload.dwell_ms,
         explicit_action=payload.explicit_action,
         session_depth=payload.session_depth,
-        hour=payload.hour
+        hour=payload.hour,
+        impression_id=payload.impression_id,
+        tz_offset_minutes=payload.tz_offset_minutes
     )
+    try:
+        from backend.services.event_logger import EventLogger
+        ev_type = "dwell_threshold" if payload.dwell_ms >= 5000 else "skip"
+        EventLogger.get_instance().log_events([{
+            "impression_id": payload.impression_id,
+            "user_id": uid,
+            "track_id": payload.track_id,
+            "type": ev_type,
+            "value_ms": payload.dwell_ms
+        }])
+    except Exception:
+        pass
+    return res
+
+@router.post("/events")
+def ingest_events(payload: BatchEventsRequest):
+    from backend.services.event_logger import EventLogger
+    event_dicts = [e.model_dump() if hasattr(e, "model_dump") else e.dict() for e in payload.events]
+    default_uid = resolve_uid()
+    for ed in event_dicts:
+        if not ed.get("user_id"):
+            ed["user_id"] = default_uid
+    inserted = EventLogger.get_instance().log_events(event_dicts)
+    return {"status": "ok", "inserted": inserted, "received": len(event_dicts)}
+
+@router.get("/recommendations/deck/{request_id}")
+def get_deck_replay(request_id: str):
+    from backend.services.event_logger import EventLogger
+    deck = EventLogger.get_instance().get_deck_by_request_id(request_id)
+    if not deck:
+        raise HTTPException(status_code=404, detail="Request ID not found")
+    return deck
+
+@router.delete("/user/{user_id}/data")
+def delete_user_telemetry_data(user_id: str):
+    from backend.services.event_logger import EventLogger
+    deleted = EventLogger.get_instance().delete_user_data(user_id)
+    return {"status": "ok", "deleted_records": deleted, "user_id": user_id}
 
 @router.get("/library")
 def get_user_library(

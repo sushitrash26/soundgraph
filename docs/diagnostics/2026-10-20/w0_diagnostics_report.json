@@ -1,0 +1,381 @@
+{
+  "D-01_user_catalog_coverage": {
+    "catalog_size": 332,
+    "users": [
+      {
+        "user_id": "astitva_demo_user",
+        "user_name": "Astitva Pathak",
+        "listened": 179,
+        "unlistened": 153,
+        "pct_listened": 53.92
+      },
+      {
+        "user_id": "google:106213359004093984439",
+        "user_name": "Astitva",
+        "listened": 168,
+        "unlistened": 164,
+        "pct_listened": 50.6
+      },
+      {
+        "user_id": "google:112916769213382752617",
+        "user_name": "Astitva",
+        "listened": 28,
+        "unlistened": 304,
+        "pct_listened": 8.43
+      },
+      {
+        "user_id": "demo_guest_user",
+        "user_name": "Unknown",
+        "listened": 2,
+        "unlistened": 330,
+        "pct_listened": 0.6
+      },
+      {
+        "user_id": "youtube:current_user",
+        "user_name": "YouTube Music Explorer",
+        "listened": 0,
+        "unlistened": 332,
+        "pct_listened": 0.0
+      },
+      {
+        "user_id": "coffee_user",
+        "user_name": "Unknown",
+        "listened": 0,
+        "unlistened": 332,
+        "pct_listened": 0.0
+      }
+    ]
+  },
+  "D-02_feature_distributions": {
+    "text_proxy": {
+      "total_tracks": 316,
+      "energy": {
+        "count": 314,
+        "min": 0.25,
+        "max": 0.92,
+        "mean": 0.547,
+        "median": 0.52,
+        "std": 0.112,
+        "decile_histogram": [
+          0,
+          0,
+          1,
+          10,
+          92,
+          144,
+          20,
+          36,
+          9,
+          2
+        ]
+      },
+      "valence": {
+        "count": 314,
+        "min": 0.2,
+        "max": 0.86,
+        "mean": 0.463,
+        "median": 0.44,
+        "std": 0.107,
+        "decile_histogram": [
+          0,
+          0,
+          5,
+          52,
+          181,
+          31,
+          33,
+          4,
+          8,
+          0
+        ]
+      },
+      "danceability": {
+        "count": 314,
+        "min": 0.2,
+        "max": 0.9,
+        "mean": 0.547,
+        "median": 0.54,
+        "std": 0.102,
+        "decile_histogram": [
+          0,
+          0,
+          7,
+          10,
+          27,
+          205,
+          22,
+          39,
+          3,
+          1
+        ]
+      },
+      "tempo_coverage": 12
+    },
+    "spotify_native": {
+      "total_tracks": 16,
+      "energy": {
+        "count": 16,
+        "min": 0.54,
+        "max": 0.88,
+        "mean": 0.722,
+        "median": 0.76,
+        "std": 0.114,
+        "decile_histogram": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          4,
+          2,
+          5,
+          5,
+          0
+        ]
+      },
+      "valence": {
+        "count": 16,
+        "min": 0.39,
+        "max": 0.8,
+        "mean": 0.568,
+        "median": 0.58,
+        "std": 0.142,
+        "decile_histogram": [
+          0,
+          0,
+          0,
+          1,
+          6,
+          2,
+          3,
+          3,
+          1,
+          0
+        ]
+      },
+      "danceability": {
+        "count": 16,
+        "min": 0.52,
+        "max": 0.9,
+        "mean": 0.669,
+        "median": 0.65,
+        "std": 0.11,
+        "decile_histogram": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          5,
+          5,
+          3,
+          2,
+          1
+        ]
+      },
+      "tempo_coverage": 16
+    }
+  },
+  "D-03_graph_topology": {
+    "track_to_track": {
+      "distinct_pairs": 3115,
+      "total_edges": 8333,
+      "max_parallel_edges": 35,
+      "degree_stats": {
+        "min": 0,
+        "p25": 0,
+        "median": 15,
+        "p75": 28,
+        "p90": 136,
+        "max": 581,
+        "isolated_tracks_count": 85
+      }
+    },
+    "all_labels_breakdown": [
+      {
+        "src_type": "Artist",
+        "tgt_type": "Artist",
+        "cnt": 15699
+      },
+      {
+        "src_type": "Track",
+        "tgt_type": "Track",
+        "cnt": 8333
+      },
+      {
+        "src_type": "Genre",
+        "tgt_type": "Genre",
+        "cnt": 4077
+      },
+      {
+        "src_type": "Track",
+        "tgt_type": "Artist",
+        "cnt": 4071
+      },
+      {
+        "src_type": "Artist",
+        "tgt_type": "Track",
+        "cnt": 3984
+      },
+      {
+        "src_type": "Genre",
+        "tgt_type": "Track",
+        "cnt": 2907
+      },
+      {
+        "src_type": "Genre",
+        "tgt_type": "Artist",
+        "cnt": 1660
+      },
+      {
+        "src_type": "Track",
+        "tgt_type": "Genre",
+        "cnt": 1500
+      },
+      {
+        "src_type": "Artist",
+        "tgt_type": "Genre",
+        "cnt": 1201
+      }
+    ]
+  },
+  "D-04_preview_reliability": {
+    "total_tracks": 332,
+    "null_previews": 43,
+    "youtube_web_links": 133,
+    "strict_playable_audio": 156,
+    "strict_playable_pct": 46.99
+  },
+  "D-05_D-06_deck_composition_and_artist_repeats": {
+    "astitva_demo_user": {
+      "deck_size": 15,
+      "arms": {
+        "0": 15
+      },
+      "arm_names": {
+        "persona_exploit": 15
+      },
+      "unique_artists": 15,
+      "total_artist_credits": 20,
+      "repeated_artists": {
+        "Daft Punk": 2,
+        "Arijit Singh": 4,
+        "Pritam": 2
+      }
+    },
+    "google:106213359004093984439": {
+      "deck_size": 15,
+      "arms": {
+        "0": 15
+      },
+      "arm_names": {
+        "persona_exploit": 15
+      },
+      "unique_artists": 14,
+      "total_artist_credits": 17,
+      "repeated_artists": {
+        "SZA": 3,
+        "Talhah Yunus": 2
+      }
+    },
+    "google:112916769213382752617": {
+      "deck_size": 15,
+      "arms": {
+        "0": 15
+      },
+      "arm_names": {
+        "persona_exploit": 15
+      },
+      "unique_artists": 15,
+      "total_artist_credits": 20,
+      "repeated_artists": {
+        "Arijit Singh": 2,
+        "Pritam": 4,
+        "The Weeknd": 2
+      }
+    }
+  },
+  "D-07_youtube_migration_sample": {
+    "csv_path": "/run/media/sushitrash26/New Volume/GENAI/17thOct/soundgraph/docs/diagnostics/2026-10-20/d07_youtube_audit_sample.csv",
+    "sample_size": 50
+  },
+  "D-08_persona_mass_vs_deck": {
+    "astitva_demo_user": {
+      "personas_count": 3,
+      "persona_masses": {
+        "persona_2": 0.654,
+        "persona_3": 0.185,
+        "persona_1": 0.161
+      },
+      "recs_reasons": {
+        "Matches your vibe with The Less I Know The Better": 1,
+        "Matches your vibe with Starboy": 3,
+        "Matches your vibe with Harder, Better, Faster, Stronger": 2,
+        "Matches your vibe with Do I Wanna Know?": 1,
+        "Matches your vibe with HUMBLE.": 1,
+        "Matches your vibe with Tum Hi Ho": 4,
+        "Matches your vibe with AAJ PHIR": 2,
+        "Matches your streaming taste": 1
+      }
+    },
+    "google:106213359004093984439": {
+      "personas_count": 3,
+      "persona_masses": {
+        "persona_2": 0.581,
+        "persona_3": 0.299,
+        "persona_1": 0.12
+      },
+      "recs_reasons": {
+        "Matches your vibe with The Less I Know The Better": 1,
+        "Matches your vibe with Starboy": 2,
+        "Matches your vibe with Harder, Better, Faster, Stronger": 1,
+        "Matches your vibe with Snooze": 2,
+        "Matches your vibe with tv off": 1,
+        "Matches your vibe with Do I Wanna Know?": 1,
+        "Matches your vibe with Subha Hone Na De": 3,
+        "Matches your vibe with Money Trees": 2,
+        "Matches your streaming taste": 2
+      }
+    },
+    "google:112916769213382752617": {
+      "personas_count": 3,
+      "persona_masses": {
+        "persona_1": 0.542,
+        "persona_3": 0.313,
+        "persona_2": 0.145
+      },
+      "recs_reasons": {
+        "Matches your vibe with Raabta (Kehte Hain Khuda Ne)": 8,
+        "Matches your streaming taste": 2,
+        "Matches your vibe with Breakup Party": 2,
+        "Matches your vibe with I Feel It Coming (feat. Daft Punk)": 2,
+        "Matches your vibe with Once Upon a Time": 1
+      }
+    }
+  },
+  "D-09_feedback_telemetry_counts": {
+    "total_feedback_edges": 71,
+    "per_user": {
+      "astitva_demo_user": {
+        "likes": 2,
+        "dislikes": 0,
+        "dwell_events": 2
+      },
+      "google:106213359004093984439": {
+        "likes": 37,
+        "dislikes": 6,
+        "dwell_events": 38
+      },
+      "google:112916769213382752617": {
+        "likes": 5,
+        "dislikes": 0,
+        "dwell_events": 5
+      },
+      "demo_guest_user": {
+        "likes": 10,
+        "dislikes": 7,
+        "dwell_events": 0
+      }
+    }
+  }
+}

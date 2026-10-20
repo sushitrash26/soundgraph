@@ -15,7 +15,7 @@ LogBox.ignoreLogs([
   'SafeAreaView has been deprecated'
 ]);
 
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -124,12 +124,14 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0E0C0B' }}>
       <SafeAreaProvider>
-        <SafeAreaView style={styles.safeArea}>
-          <StatusBar barStyle="light-content" backgroundColor="#0E0C0B" />
-          {isMainApp && <AmbientGlassBackground />}
+        <View style={styles.rootContainer}>
+          <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
+          <AmbientGlassBackground />
 
           {/* Active Screen Content */}
-          {renderActiveScreen()}
+          <View style={styles.screenContainer}>
+            {renderActiveScreen()}
+          </View>
 
           {/* Bottom Floating Glass Nav Bar for Main App */}
           {isMainApp && (
@@ -147,6 +149,7 @@ export default function App() {
             visible={isAuthModalOpen}
             animationType="slide"
             transparent={true}
+            statusBarTranslucent={true}
             onRequestClose={closeAuthModal}
           >
             <View style={styles.modalBackdrop}>
@@ -155,17 +158,17 @@ export default function App() {
               </View>
             </View>
           </Modal>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  safeArea: {
+  rootContainer: {
     flex: 1,
-    backgroundColor: '#0E0C0B'
+    backgroundColor: '#0E0C0B',
+    overflow: 'hidden'
   },
   screenContainer: {
     flex: 1
