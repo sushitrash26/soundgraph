@@ -3,7 +3,11 @@ import sqlite3
 import json
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
-import faiss
+try:
+    import faiss
+except Exception:
+    faiss = None
+
 from backend.core.logger import logger
 
 class CanonicalStore:
@@ -21,7 +25,7 @@ class CanonicalStore:
     FAISS_DIM = 128
 
     _conn: Optional[sqlite3.Connection] = None
-    _faiss_index: Optional[faiss.IndexFlatIP] = None
+    _faiss_index: Any = None
     _faiss_track_ids: List[str] = []
 
     @classmethod
@@ -90,7 +94,9 @@ class CanonicalStore:
         conn.commit()
 
     @classmethod
-    def get_faiss_index(cls) -> faiss.IndexFlatIP:
+    def get_faiss_index(cls):
+        if faiss is None:
+            return None
         if cls._faiss_index is None:
             cls._faiss_index = faiss.IndexFlatIP(cls.FAISS_DIM)
             cls._load_faiss_from_db()
@@ -240,11 +246,17 @@ class CanonicalStore:
     @classmethod
     def query_melody_candidates(cls, query_vec: np.ndarray, top_k: int = 50) -> List[Tuple[str, float]]:
         """Fast FAISS search for Top K coarse melody candidates."""
+        if faiss is None:
+            conn = cls.get_conn()
+            cursor = conn.cursor()
+            rows = cursor.execute("SELECT track_id FROM melody_contours LIMIT ?", (top_k,)).fetchall()
+            return [(r[0], 0.5) for r in rows]
+
         if cls._faiss_index is None or cls._faiss_index.ntotal == 0:
             cls.get_faiss_index()
 
-        if cls._faiss_index.ntotal == 0 or len(cls._faiss_track_ids) == 0:
-            # Fallback to returning all recordings from DB if FAISS is small
+        if cls._faiss_index is None or cls._faiss_index.ntotal == 0 or len(cls._faiss_track_ids) == 0:
+            # Fallback to returning all recordings from DB if FAISS is small or empty
             conn = cls.get_conn()
             cursor = conn.cursor()
             rows = cursor.execute("SELECT track_id FROM melody_contours LIMIT ?", (top_k,)).fetchall()

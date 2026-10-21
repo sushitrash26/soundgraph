@@ -1,533 +1,1114 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react"
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+type Tab = "deck" | "lens" | "move" | "profile"
+type Platform = "youtube" | "spotify"
+type Source = Platform | "deck"
+type IconName = "cards" | "lens" | "move" | "heart" | "close" | "play" | "pause" | "spark" | "mic" | "waves" | "check" | "arrow" | "chevron" | "user"
 
-type IconProps = {
-  name: "arrow" | "share" | "spark" | "headphones" | "route" | "user" | "home" | "compass" | "transfer" | "close";
-  className?: string;
-};
-
-const defaultArtists = [
-  {
-    rank: "01",
-    name: "Kendrick Lamar",
-    genre: "Hip Hop",
-    image: "https://cdn-images.dzcdn.net/images/artist/be0a7c550567f4af0ed202d7235b74d6/500x500-000000-80-0-0.jpg",
-  },
-  {
-    rank: "02",
-    name: "The Weeknd",
-    genre: "R&B / Synthpop",
-    image: "https://cdn-images.dzcdn.net/images/artist/581693b4724a7fcfa754455101e13a44/500x500-000000-80-0-0.jpg",
-  },
-  {
-    rank: "03",
-    name: "Kanye West",
-    genre: "Art Pop",
-    image: "https://cdn-images.dzcdn.net/images/artist/bb76c2ee3b068726ab4c37b0aabdb57a/500x500-000000-80-0-0.jpg",
-  },
-  {
-    rank: "04",
-    name: "Daft Punk",
-    genre: "Electronic",
-    image: "https://cdn-images.dzcdn.net/images/artist/638e69b9caaf9f9f3f8826febea7b543/500x500-000000-80-0-0.jpg",
-  },
-];
-
-function Icon({ name, className = "size-5" }: IconProps) {
-  const paths = {
-    arrow: <path d="m15 18-6-6 6-6" />,
-    share: <><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="m8.2 10.8 7.5-4.4M8.2 13.2l7.5 4.4" /></>,
-    spark: <><path d="m12 3 1.2 4.2L17 9l-3.8 1.8L12 15l-1.2-4.2L7 9l3.8-1.8L12 3Z" /><path d="m19 14 .7 2.3L22 17l-2.3.7L19 20l-.7-2.3L16 17l2.3-.7L19 14ZM5 14l.6 1.8L7.5 17l-1.9.6L5 19.5l-.6-1.9L2.5 17l1.9-1.2L5 14Z" /></>,
-    headphones: <><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M18 19h-1a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h3v3a3 3 0 0 1-3 3ZM6 19H5a3 3 0 0 1-3-3v-3h3a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2Z" /></>,
-    route: <><circle cx="5" cy="6" r="2" /><circle cx="19" cy="18" r="2" /><path d="M7 6h5a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h8" /></>,
-    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
-    home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></>,
-    compass: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z" /></>,
-    transfer: <><path d="M7 7h13l-3-3M17 17H4l3 3" /></>,
-    close: <><path d="m6 6 12 12M18 6 6 18" /></>,
-  };
-
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {paths[name]}
-    </svg>
-  );
+type Track = {
+  title: string
+  artist: string
+  image: string
+  match: number
+  tags: string[]
+  color: string
 }
 
-function ShareSheet({ onClose, profileData }: { onClose: () => void; profileData: any }) {
-  const [copied, setCopied] = useState(false);
-
-  const userName = profileData?.user?.name || "Sound Explorer";
-  const archetype = profileData?.passport?.archetype || "Midnight Explorer";
-  const shareUrl = profileData?.passport?.share_url || window.location.href;
-  const artists = profileData?.top_artists || defaultArtists;
-  const artistsStr = artists.slice(0, 3).map((a: any) => a.name).join(" · ");
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-    } catch {
-      // Clipboard access can be unavailable in embedded previews.
-    }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-3 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Share music passport">
-      <button className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Close share sheet" />
-      <div className="glass-panel glass-strong relative w-full max-w-md rounded-[2rem] p-3 shadow-2xl animate-sheet">
-        <div className="relative overflow-hidden rounded-[1.55rem] bg-[#d7ff64] p-6 text-[#11120e]">
-          <div className="absolute -right-12 -top-16 size-48 rounded-full bg-[#8b5cf6] blur-[2px] opacity-90" />
-          <div className="absolute -bottom-20 -left-12 size-48 rounded-full bg-[#ff7557] blur-[2px] opacity-90" />
-          <div className="relative">
-            <div className="mb-16 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-[0.22em]">Music passport</span>
-              <span className="rounded-full bg-black/10 px-3 py-1 text-[10px] font-bold">2025</span>
-            </div>
-            <p className="text-sm font-semibold opacity-70">{userName}’s sound is</p>
-            <h2 className="mt-1 max-w-[12ch] text-5xl font-semibold leading-[0.9] tracking-[-0.055em]">A {archetype.toLowerCase()}.</h2>
-            <div className="mt-10 flex items-end justify-between border-t border-black/15 pt-4">
-              <p className="max-w-[18ch] text-xs font-semibold leading-relaxed">{artistsStr}</p>
-              <p className="text-right text-[10px] font-bold uppercase tracking-wider">made with<br />SoundGraph</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2 p-2 pt-4">
-          <button onClick={copyLink} className="h-12 flex-1 rounded-full bg-white font-semibold text-black transition hover:bg-[#d7ff64]">
-            {copied ? "Link copied" : "Copy profile link"}
-          </button>
-          <button onClick={onClose} className="grid size-12 place-items-center rounded-full border border-white/10 text-white transition hover:bg-white/10" aria-label="Close">
-            <Icon name="close" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+type UserDeck = {
+  name: string
+  tracks: Track[]
 }
 
-function ProfileScreen({ onBack }: { onBack: () => void }) {
-  const [period, setPeriod] = useState<"month" | "year">("month");
-  const [shareOpen, setShareOpen] = useState(false);
-  const [profileData, setProfileData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+const tracks: Track[] = [
+  {
+    title: "After Dark",
+    artist: "Luna Vale",
+    image:
+      "https://images.unsplash.com/photo-1770335435091-75e3f07cd5e8?auto=format&fit=crop&w=900&q=88",
+    match: 96,
+    tags: ["Alt pop", "Nocturnal"],
+    color: "#b263ff",
+  },
+  {
+    title: "Slow Motion",
+    artist: "The Marías",
+    image:
+      "https://images.unsplash.com/photo-1760800185627-12eb152aaca4?auto=format&fit=crop&w=900&q=88",
+    match: 92,
+    tags: ["Dream pop", "Velvet"],
+    color: "#ff645f",
+  },
+  {
+    title: "Soft Static",
+    artist: "Amaya Blue",
+    image:
+      "https://images.unsplash.com/photo-1543868849-ca832301484f?auto=format&fit=crop&w=900&q=88",
+    match: 89,
+    tags: ["R&B", "Airy"],
+    color: "#62a7ff",
+  },
+  {
+    title: "Night Drive",
+    artist: "Milo Grey",
+    image:
+      "https://images.unsplash.com/photo-1608649443926-1e224443ef88?auto=format&fit=crop&w=900&q=88",
+    match: 87,
+    tags: ["Indie", "Warm"],
+    color: "#d7ff64",
+  },
+]
 
-  useEffect(() => {
-    async function loadLiveProfile() {
-      try {
-        const res = await fetch(`${API_BASE}/profile/me`);
-        const json = await res.json();
-        if (json?.status === "success") {
-          setProfileData(json);
-        }
-      } catch (err) {
-        console.warn("Could not fetch real-time profile from API:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadLiveProfile();
-  }, []);
-
-  const user = profileData?.user || {
-    name: "Sound Explorer",
-    avatar_url: defaultArtists[0].image,
-    connected_platforms: ["spotify", "youtube"],
-    updated_at: "Updated today"
-  };
-
-  const passport = profileData?.passport || {
-    archetype: "Midnight Explorer",
-    tagline: "Dreamy vocals, late-night R&B and a little beautiful chaos.",
-    share_url: window.location.href
-  };
-
-  const topArtists = profileData?.top_artists && profileData.top_artists.length >= 2
-    ? profileData.top_artists
-    : defaultArtists;
-
-  const signature = profileData?.signature;
-  const currentSignature = signature ? signature[period] : null;
-  const discoveryScore = currentSignature ? currentSignature.discovery_score : (period === "month" ? 82 : 76);
-  const discoveryTag = currentSignature ? currentSignature.tag : "Explorer";
-  const sliders = currentSignature ? currentSignature.sliders.map((s: any) => [s.start, s.end, s.value]) : [
-    ["Analog Strings", "Digital Synths", period === "month" ? 75 : 70],
-    ["Introspective Calm", "Kinetic Rapture", period === "month" ? 65 : 59],
-    ["Underground Crates", "Stadium Anthems", period === "month" ? 95 : 90],
-  ];
-
-  const migration = profileData?.migration || {
-    tracks_moved: 0,
-    hours_preserved: "0 hrs",
-    perfect_transfers: 0,
-    has_migrated: false
-  };
-
-  const featuredBadge = profileData?.featured_badge || {
-    title: "Bridge Builder",
-    rarity_tag: "TOP 8% RARE",
-    description: "Moved over 1,000 tracks between worlds."
-  };
-
-  return (
-    <div className="app-shell min-h-screen text-[#f4f3ee] selection:bg-[#d7ff64] selection:text-black">
-      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb-three" aria-hidden="true" />
-      <div className="noise-layer" aria-hidden="true" />
-      <main className="relative z-10 mx-auto min-h-screen max-w-md overflow-hidden pb-28">
-        <header className="flex items-center justify-between px-5 pb-4 pt-6">
-          <button onClick={onBack} className="glass-control grid size-11 place-items-center rounded-full transition hover:-translate-y-0.5" aria-label="Go back">
-            <Icon name="arrow" />
-          </button>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/45">Your profile</p>
-          <button onClick={() => setShareOpen(true)} className="grid size-11 place-items-center rounded-full bg-[#d7ff64] text-black transition hover:scale-105" aria-label="Share profile">
-            <Icon name="share" />
-          </button>
-        </header>
-
-        <section className="px-5 pt-4">
-          <div className="glass-panel glass-hero glass-shimmer relative min-h-[490px] overflow-hidden rounded-[2rem] p-5">
-            <div className="aurora absolute -right-16 top-0 size-72 rounded-full opacity-80" />
-            <div className="absolute -bottom-36 -left-20 size-72 rounded-full bg-[#b8f23d]/25 blur-3xl" />
-            <div className="relative flex items-start justify-between">
-              <div className="relative">
-                <img
-                  src={user.avatar_url || topArtists[0]?.image}
-                  alt={`${user.name}'s profile`}
-                  className="size-20 rounded-2xl object-cover object-top grayscale-[15%]"
-                />
-                <span className="profile-spark absolute -bottom-2 -right-2 grid size-8 place-items-center rounded-full border-4 border-[#252521] bg-[#d7ff64] text-black">
-                  <Icon name="spark" className="size-4" />
-                </span>
-              </div>
-              <span className="rounded-full border border-white/15 bg-black/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/70 backdrop-blur-md">
-                {user.updated_at || "Updated today"}
-              </span>
-            </div>
-
-            <div className="relative mt-16">
-              <p className="mb-2 text-sm font-medium text-white/55">{user.name}’s music passport</p>
-              <h1 className="max-w-[10ch] text-[3.4rem] font-semibold leading-[0.9] tracking-[-0.06em]">
-                {passport.archetype}
-              </h1>
-              <p className="mt-6 max-w-[28ch] text-sm leading-relaxed text-white/60">
-                {passport.tagline}
-              </p>
-            </div>
-
-            <div className="relative mt-8 flex items-center justify-between border-t border-white/10 pt-5">
-              <div className="flex items-center gap-2">
-                {user.connected_platforms?.includes("spotify") && (
-                  <span className="grid size-8 place-items-center rounded-full bg-[#1ed760] text-[10px] font-black text-black">S</span>
-                )}
-                {user.connected_platforms?.includes("youtube") && (
-                  <span className="grid size-8 place-items-center rounded-full bg-[#ff0033] text-[10px] font-black text-white">▶</span>
-                )}
-                <span className="text-xs text-white/50">
-                  {user.connected_platforms?.length || 1} platform{user.connected_platforms?.length === 1 ? "" : "s"} connected
-                </span>
-              </div>
-              <button onClick={() => setShareOpen(true)} className="text-xs font-semibold text-[#d7ff64] transition hover:underline">
-                View passport
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="px-5 pt-10">
-          <div className="mb-5 flex items-end justify-between">
-            <div>
-              <p className="eyebrow">On repeat</p>
-              <h2 className="section-title">Your artists</h2>
-            </div>
-            <button className="text-xs font-semibold text-white/50 transition hover:text-white">See all</button>
-          </div>
-
-          <div className="grid grid-cols-[1.55fr_1fr_1fr] gap-2">
-            <article className="glass-image group relative row-span-2 min-h-72 overflow-hidden rounded-[1.5rem]">
-              <img
-                src={topArtists[0]?.image || defaultArtists[0].image}
-                alt=""
-                className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent" />
-              <span className="absolute left-4 top-4 text-4xl font-semibold tracking-tighter">01</span>
-              <div className="absolute bottom-4 left-4">
-                <h3 className="text-xl font-semibold">{topArtists[0]?.name}</h3>
-                <p className="text-[11px] text-white/60">{topArtists[0]?.genre}</p>
-              </div>
-            </article>
-
-            {topArtists.slice(1, 4).map((artist: any, index: number) => (
-              <article key={artist.name || index} className="glass-image group relative aspect-square overflow-hidden rounded-[1.35rem]">
-                <img
-                  src={artist.image || defaultArtists[index + 1]?.image}
-                  alt=""
-                  className="absolute inset-0 size-full object-cover object-top grayscale-[20%] transition duration-500 group-hover:scale-105 group-hover:grayscale-0"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent" />
-                <span className="absolute left-3 top-3 text-xs font-bold">0{index + 2}</span>
-                <p className="absolute bottom-3 left-3 max-w-[90%] truncate text-xs font-semibold">{artist.name}</p>
-              </article>
-            ))}
-          </div>
-          <p className="mt-3 text-[10px] text-white/25">Verified artist portraits cached from Deezer & graph</p>
-        </section>
-
-        <section className="px-5 pt-12">
-          <div className="mb-5 flex items-end justify-between">
-            <div>
-              <p className="eyebrow">Your pulse</p>
-              <h2 className="section-title">Music signature</h2>
-            </div>
-            <div className="flex rounded-full bg-white/[0.06] p-1 text-[10px] font-semibold">
-              <button onClick={() => setPeriod("month")} className={`rounded-full px-3 py-1.5 transition ${period === "month" ? "bg-white text-black" : "text-white/45"}`}>Month</button>
-              <button onClick={() => setPeriod("year")} className={`rounded-full px-3 py-1.5 transition ${period === "year" ? "bg-white text-black" : "text-white/45"}`}>Year</button>
-            </div>
-          </div>
-
-          <div className="glass-panel glass-depth rounded-[1.75rem] p-5">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-sm text-white/50">Discovery score</p>
-                <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">{discoveryScore}<span className="text-xl text-white/35">%</span></p>
-              </div>
-              <span className="rounded-full bg-[#d7ff64]/10 px-3 py-1.5 text-xs font-semibold text-[#d7ff64]">{discoveryTag}</span>
-            </div>
-            <div className="mt-7 space-y-5">
-              {sliders.map(([start, end, value]: [string, string, number]) => (
-                <div key={start}>
-                  <div className="mb-2 flex justify-between text-[10px] font-medium text-white/40">
-                    <span>{start}</span><span>{end}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] via-[#fa7185] to-[#d7ff64] transition-all duration-500" style={{ width: `${value}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="px-5 pt-12">
-          <p className="eyebrow">Across the universe</p>
-          <h2 className="section-title">Your migration story</h2>
-          <div className="mt-5 grid grid-cols-2 gap-2">
-            <div className="lime-glass col-span-2 flex flex-col justify-between rounded-[1.6rem] p-5 text-black">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-55">Tracks moved</p>
-                  <p className="mt-1 text-5xl font-semibold tracking-[-0.06em]">{migration.tracks_moved.toLocaleString()}</p>
-                </div>
-                <div className="grid size-16 place-items-center rounded-full border border-black/15">
-                  <Icon name="route" className="size-7" />
-                </div>
-              </div>
-
-              {!migration.has_migrated && (
-                <div className="mt-4 pt-3 border-t border-black/10">
-                  <button
-                    onClick={() => window.alert("Navigate to the Move tab to transfer your playlists between Spotify and YouTube Music!")}
-                    className="rounded-full bg-black px-4 py-2 text-xs font-bold text-[#d7ff64] transition hover:scale-105"
-                  >
-                    Migrate your first playlist ➔
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="glass-panel glass-depth glass-hover rounded-[1.5rem] p-4">
-              <Icon name="headphones" className="mb-7 size-5 text-[#fa7185]" />
-              <p className="text-2xl font-semibold tracking-tight">{migration.hours_preserved}</p>
-              <p className="mt-1 text-[11px] text-white/40">Music preserved</p>
-            </div>
-            <div className="glass-panel glass-depth glass-hover rounded-[1.5rem] p-4">
-              <Icon name="transfer" className="mb-7 size-5 text-[#8b5cf6]" />
-              <p className="text-2xl font-semibold tracking-tight">{migration.perfect_transfers}</p>
-              <p className="mt-1 text-[11px] text-white/40">Perfect transfers</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="px-5 pt-12">
-          <p className="eyebrow">Rare find</p>
-          <h2 className="section-title">Featured badge</h2>
-          <div className="glass-panel glass-depth mt-5 flex items-center gap-5 rounded-[1.75rem] p-4">
-            <div className="badge-shine floating-badge grid size-24 shrink-0 place-items-center rounded-[1.4rem] text-black">
-              <Icon name="route" className="size-10" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d7ff64]">{featuredBadge.rarity_tag}</span>
-              <h3 className="mt-1 text-xl font-semibold">{featuredBadge.title}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-white/45">{featuredBadge.description}</p>
-            </div>
-          </div>
-        </section>
-
-        <button onClick={() => setShareOpen(true)} className="mx-5 mt-10 flex w-[calc(100%-2.5rem)] items-center justify-between rounded-full bg-white px-5 py-4 font-semibold text-black transition hover:bg-[#d7ff64]">
-          Share your music passport
-          <span className="grid size-9 place-items-center rounded-full bg-black text-white"><Icon name="share" className="size-4" /></span>
-        </button>
-      </main>
-
-      <nav className="glass-nav fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-[416px] -translate-x-1/2 items-center justify-around rounded-full px-3 py-2 shadow-2xl" aria-label="Main navigation">
-        {[
-          ["home", "Home"],
-          ["compass", "Lens"],
-          ["transfer", "Move"],
-          ["user", "Profile"],
-        ].map(([icon, label]) => (
-          <button key={label} className={`flex min-w-16 flex-col items-center gap-1 rounded-full py-2 text-[9px] font-medium transition ${label === "Profile" ? "bg-white text-black" : "text-white/40 hover:text-white"}`}>
-            <Icon name={icon as IconProps["name"]} className="size-[18px]" />
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      {shareOpen && <ShareSheet onClose={() => setShareOpen(false)} profileData={profileData} />}
-    </div>
-  );
+const playlists = {
+  spotify: [
+    { name: "Liked Songs", count: 348, color: "from-[#5747d7] to-[#b9a9ff]" },
+    { name: "night bus", count: 46, color: "from-[#392f59] to-[#f86f72]" },
+    { name: "soft focus", count: 82, color: "from-[#597c8c] to-[#d7ff64]" },
+    { name: "Sunday reset", count: 31, color: "from-[#965c3f] to-[#f4d0a0]" },
+  ],
+  youtube: [
+    { name: "My Supermix", count: 100, color: "from-[#4b1729] to-[#ff4c5d]" },
+    {
+      name: "late night finds",
+      count: 64,
+      color: "from-[#25325f] to-[#aa7cff]",
+    },
+    { name: "Discoveries", count: 118, color: "from-[#254e48] to-[#6fffc1]" },
+    { name: "On repeat", count: 25, color: "from-[#7a3c21] to-[#ffbd73]" },
+  ],
 }
 
-function PlatformMark({ platform }: { platform: "spotify" | "youtube" }) {
-  if (platform === "spotify") {
-    return (
-      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#1ed760] text-black shadow-[0_8px_24px_rgba(30,215,96,.2)]">
-        <svg className="size-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.58 14.43a.62.62 0 0 1-.85.2c-2.33-1.43-5.27-1.75-8.73-.96a.62.62 0 1 1-.28-1.2c3.8-.87 7.07-.5 9.66 1.08.3.18.4.57.2.88Zm1.22-2.7a.78.78 0 0 1-1.07.25c-2.67-1.64-6.74-2.11-9.9-1.16a.78.78 0 0 1-.45-1.49c3.61-1.09 8.1-.56 11.17 1.33.37.22.48.7.25 1.07Zm.1-2.81C14.7 9.02 9.4 8.85 6.35 9.77a.93.93 0 1 1-.54-1.78c3.5-1.06 9.37-.85 13.04 1.33a.93.93 0 0 1-.95 1.6Z" />
-        </svg>
-      </span>
-    );
+function Icon({
+  name,
+  className = "size-5",
+}: {
+  name: IconName
+  className?: string
+}) {
+  const paths: Record<IconName, React.ReactNode> = {
+    cards: (
+      <>
+        <rect x="5" y="3" width="14" height="18" rx="3" />
+        <path d="M9 7h6M9 11h6M9 15h3" />
+      </>
+    ),
+    lens: (
+      <>
+        <circle cx="12" cy="12" r="8" />
+        <circle cx="12" cy="12" r="2" />
+        <path d="M12 1v3M12 20v3M1 12h3M20 12h3" />
+      </>
+    ),
+    move: (
+      <>
+        <path d="M5 7h14l-3-3M19 17H5l3 3" />
+      </>
+    ),
+    heart: (
+      <path d="M20.8 4.7a5.4 5.4 0 0 0-7.6 0L12 5.9l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.7a5.4 5.4 0 0 0 0-7.6Z" />
+    ),
+    close: <path d="m6 6 12 12M18 6 6 18" />,
+    play: <path d="m9 6 9 6-9 6Z" />,
+    pause: (
+      <>
+        <path d="M9 7v10M15 7v10" />
+      </>
+    ),
+    spark: (
+      <>
+        <path d="m12 3 1.3 4.3L17 9l-3.7 1.7L12 15l-1.3-4.3L7 9l3.7-1.7L12 3Z" />
+        <path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z" />
+      </>
+    ),
+    mic: (
+      <>
+        <rect x="9" y="3" width="6" height="12" rx="3" />
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+      </>
+    ),
+    waves: (
+      <>
+        <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+      </>
+    ),
+    check: <path d="m5 12 4 4L19 6" />,
+    arrow: <path d="m8 5 7 7-7 7" />,
+    chevron: <path d="m9 6 6 6-6 6" />,
+    user: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </>
+    ),
   }
 
   return (
-    <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#ff0033] text-white shadow-[0_8px_24px_rgba(255,0,51,.2)]">
-      <svg className="ml-0.5 size-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M21.58 7.19a2.76 2.76 0 0 0-1.94-1.95C17.93 4.78 12 4.78 12 4.78s-5.93 0-7.64.46a2.76 2.76 0 0 0-1.94 1.95A28.7 28.7 0 0 0 1.96 12c0 1.63.16 3.25.46 4.81a2.76 2.76 0 0 0 1.94 1.95c1.71.46 7.64.46 7.64.46s5.93 0 7.64-.46a2.76 2.76 0 0 0 1.94-1.95c.3-1.56.46-3.18.46-4.81s-.16-3.25-.46-4.81ZM10 15.1V8.9l5.2 3.1-5.2 3.1Z" />
-      </svg>
-    </span>
-  );
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  )
 }
 
-function LandingScreen({ onConnect }: { onConnect: () => void }) {
-  const [connecting, setConnecting] = useState<"spotify" | "youtube" | null>(null);
+function PlatformMark({
+  platform,
+  small = false,
+}: {
+  platform: Platform
+  small?: boolean
+}) {
+  return (
+    <span
+      className={`grid shrink-0 place-items-center rounded-full ${
+        small ? "size-7" : "size-10"
+      } ${
+        platform === "spotify"
+          ? "bg-[#1ed760] text-black"
+          : "bg-[#ff0033] text-white"
+      }`}
+    >
+      {platform === "spotify" ? (
+        <svg
+          className={small ? "size-4" : "size-5"}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.58 14.43a.62.62 0 0 1-.85.2c-2.33-1.43-5.27-1.75-8.73-.96a.62.62 0 1 1-.28-1.2c3.8-.87 7.07-.5 9.66 1.08.3.18.4.57.2.88Zm1.22-2.7a.78.78 0 0 1-1.07.25c-2.67-1.64-6.74-2.11-9.9-1.16a.78.78 0 0 1-.45-1.49c3.61-1.09 8.1-.56 11.17 1.33.37.22.48.7.25 1.07Zm.1-2.81C14.7 9.02 9.4 8.85 6.35 9.77a.93.93 0 1 1-.54-1.78c3.5-1.06 9.37-.85 13.04 1.33a.93.93 0 0 1-.95 1.6Z" />
+        </svg>
+      ) : (
+        <svg
+          className={`${small ? "size-4" : "size-5"} ml-0.5`}
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M21.6 7.2a2.8 2.8 0 0 0-2-2C17.9 4.8 12 4.8 12 4.8s-5.9 0-7.6.4a2.8 2.8 0 0 0-2 2A28 28 0 0 0 2 12c0 1.6.1 3.2.4 4.8a2.8 2.8 0 0 0 2 2c1.7.4 7.6.4 7.6.4s5.9 0 7.6-.4a2.8 2.8 0 0 0 2-2c.3-1.6.4-3.2.4-4.8s-.1-3.2-.4-4.8ZM10 15.1V8.9l5.2 3.1-5.2 3.1Z" />
+        </svg>
+      )}
+    </span>
+  )
+}
 
-  const connect = (platform: "spotify" | "youtube") => {
-    setConnecting(platform);
-    window.setTimeout(onConnect, 650);
-  };
+function Header({ eyebrow, title }: { eyebrow: string title: string }) {
+  return (
+    <header className="flex items-start justify-between px-5 pb-5 pt-7">
+      <div>
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#d7ff64]">
+          {eyebrow}
+        </p>
+        <h1 className="text-[2rem] font-semibold leading-none tracking-[-0.055em]">
+          {title}
+        </h1>
+      </div>
+      <button
+        className="glass-control grid size-11 place-items-center rounded-full"
+        aria-label="Open profile"
+      >
+        <Icon name="user" className="size-5" />
+      </button>
+    </header>
+  )
+}
+
+function DeckPage({
+  decks,
+  onAddToDeck,
+}: {
+  decks: UserDeck[]
+  onAddToDeck: (deckIndex: number | null, name: string, track: Track) => void
+}) {
+  const [index, setIndex] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newDeckName, setNewDeckName] = useState("")
+  const startX = useRef(0)
+  const current = tracks[index % tracks.length]
+
+  const finishSwipe = (direction: -1 | 1) => {
+    if (direction === 1) {
+      setDragging(false)
+      setOffset(0)
+      setSaveOpen(true)
+      return
+    }
+    setDragging(false)
+    setOffset(direction * 480)
+    window.setTimeout(() => {
+      setIndex((value) => value + 1)
+      setOffset(0)
+      setPlaying(false)
+    }, 260)
+  }
+
+  const saveTrack = (deckIndex: number | null, name = "") => {
+    onAddToDeck(deckIndex, name, current)
+    setSaveOpen(false)
+    setCreating(false)
+    setNewDeckName("")
+    setOffset(480)
+    window.setTimeout(() => {
+      setIndex((value) => value + 1)
+      setOffset(0)
+      setPlaying(false)
+    }, 260)
+  }
+
+  const pointerUp = () => {
+    if (Math.abs(offset) > 90) {
+      finishSwipe(offset > 0 ? 1 : -1)
+    } else {
+      setDragging(false)
+      setOffset(0)
+    }
+  }
 
   return (
-    <div className="app-shell landing-shell min-h-screen text-[#f4f3ee] selection:bg-[#d7ff64] selection:text-black">
-      <div className="ambient-orb ambient-orb-one" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb-two" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb-three" aria-hidden="true" />
-      <div className="noise-layer" aria-hidden="true" />
-
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col overflow-hidden px-5 pb-7 pt-6">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="brand-mark grid size-10 place-items-center rounded-xl text-black">
-              <Icon name="route" className="size-5" />
-            </span>
-            <span className="text-sm font-bold tracking-[-0.02em]">SoundGraph</span>
-          </div>
-          <span className="glass-control rounded-full px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
-            Your music, anywhere
+    <main className="page-content">
+      <Header eyebrow="Made for Maya" title="Your daily deck" />
+      <section className="px-5">
+        <div className="mb-4 flex items-center justify-between text-xs text-white/45">
+          <span>{index + 1} discovered today</span>
+          <span className="flex items-center gap-1.5 text-[#d7ff64]">
+            <span className="size-1.5 rounded-full bg-[#d7ff64] shadow-[0_0_10px_#d7ff64]" />
+            Deck refreshes endlessly
           </span>
-        </header>
+        </div>
 
-        <section className="flex flex-1 flex-col justify-center py-10">
-          <div className="landing-visual relative mx-auto mb-10 h-52 w-full max-w-[350px]" aria-hidden="true">
-            <div className="cover-card cover-card-left">
-              <img src={defaultArtists[1].image} alt="" />
+        <div className="deck-stage relative h-[31rem]">
+          {[2, 1].map((depth) => {
+            const item = tracks[(index + depth) % tracks.length]
+            return (
+              <div
+                key={`${index}-${depth}`}
+                className={`deck-card deck-card-${depth} absolute inset-0 overflow-hidden rounded-[2rem]`}
+              >
+                <img
+                  src={item.image}
+                  alt=""
+                  className="size-full object-cover"
+                />
+              </div>
+            )
+          })}
+
+          <article
+            className={`deck-card active-card absolute inset-0 touch-none overflow-hidden rounded-[2rem] ${
+              dragging ? "is-dragging" : ""
+            }`}
+            style={{
+              transform: `translateX(${offset}px) rotate(${offset / 18}deg)`,
+              ["--card-accent" as string]: current.color,
+            }}
+            onPointerDown={(event) => {
+              startX.current = event.clientX
+              setDragging(true)
+              event.currentTarget.setPointerCapture(event.pointerId)
+            }}
+            onPointerMove={(event) => {
+              if (dragging) setOffset(event.clientX - startX.current)
+            }}
+            onPointerUp={pointerUp}
+            onPointerCancel={pointerUp}
+          >
+            <img
+              src={current.image}
+              alt={`${current.artist} artwork`}
+              className="absolute inset-0 size-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/95" />
+            <div className="card-glow absolute inset-x-0 bottom-0 h-1/2" />
+
+            <div
+              className={`swipe-stamp left-5 rotate-[-8deg] text-[#d7ff64] ${
+                offset > 45 ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              KEEP
             </div>
-            <div className="cover-card cover-card-center">
-              <img src={defaultArtists[0].image} alt="" />
-              <span className="absolute bottom-3 left-3 right-3 rounded-xl border border-white/20 bg-black/25 p-2.5 text-[9px] font-semibold backdrop-blur-xl">
-                Your sound, in one place
+            <div
+              className={`swipe-stamp right-5 rotate-[8deg] text-[#ff817a] ${
+                offset < -45 ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              SKIP
+            </div>
+
+            <div className="absolute left-5 right-5 top-5 flex items-center justify-between">
+              <span className="rounded-full border border-white/20 bg-black/20 px-3 py-1.5 text-[10px] font-semibold backdrop-blur-xl">
+                {current.match}% taste match
+              </span>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setPlaying((value) => !value)
+                }}
+                className="grid size-11 place-items-center rounded-full border border-white/25 bg-white/15 backdrop-blur-xl"
+                aria-label={playing ? "Pause preview" : "Play preview"}
+              >
+                <Icon name={playing ? "pause" : "play"} className="size-5" />
+              </button>
+            </div>
+
+            {playing && (
+              <div
+                className="absolute inset-x-0 top-24 flex h-12 items-center justify-center gap-1"
+                aria-label="Playing preview"
+              >
+                {[0, 1, 2, 3, 4, 5, 6].map((bar) => (
+                  <span
+                    key={bar}
+                    className="preview-bar"
+                    style={{ animationDelay: `${bar * 80}ms` }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="absolute inset-x-0 bottom-0 p-6">
+              <div className="mb-3 flex gap-2">
+                {current.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-medium backdrop-blur-lg"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <h2 className="text-[2.65rem] font-semibold leading-[0.94] tracking-[-0.06em]">
+                {current.title}
+              </h2>
+              <p className="mt-2 text-sm text-white/60">{current.artist}</p>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setSaveOpen(true)
+                }}
+                className="mt-4 flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black"
+              >
+                <Icon name="cards" className="size-4" />
+                Add to a deck
+              </button>
+              <div className="mt-5 h-0.5 overflow-hidden rounded-full bg-white/15">
+                <div
+                  className={`h-full bg-white ${
+                    playing ? "preview-progress" : "w-0"
+                  }`}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[9px] text-white/35">
+                <span>0:12 PREVIEW</span>
+                <span>FROM YOUR ALT MIX</span>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div className="mt-6 flex items-center justify-center gap-5">
+          <button
+            onClick={() => finishSwipe(-1)}
+            className="action-button grid size-16 place-items-center rounded-full text-[#ff817a]"
+            aria-label="Skip track"
+          >
+            <Icon name="close" className="size-7" />
+          </button>
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-white/35">
+            <Icon name="arrow" className="size-3 rotate-180" />
+            Swipe
+            <Icon name="arrow" className="size-3" />
+          </div>
+          <button
+            onClick={() => finishSwipe(1)}
+            className="action-button like-button grid size-16 place-items-center rounded-full text-black"
+            aria-label="Save track"
+          >
+            <Icon name="heart" className="size-7 fill-current" />
+          </button>
+        </div>
+      </section>
+      {saveOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 p-3 backdrop-blur-md">
+          <button
+            className="absolute inset-0"
+            onClick={() => {
+              setSaveOpen(false)
+              setCreating(false)
+            }}
+            aria-label="Close deck picker"
+          />
+          <section className="result-sheet relative w-full max-w-md rounded-[2rem] p-5">
+            <div className="mb-5 flex items-center gap-3">
+              <img
+                src={current.image}
+                alt=""
+                className="size-14 rounded-xl object-cover"
+              />
+              <div className="flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7ff64]">
+                  Save song
+                </p>
+                <h2 className="mt-1 text-lg font-semibold">{current.title}</h2>
+                <p className="text-xs text-white/40">{current.artist}</p>
+              </div>
+              <button
+                onClick={() => setSaveOpen(false)}
+                className="grid size-9 place-items-center rounded-full bg-white/10"
+                aria-label="Close"
+              >
+                <Icon name="close" className="size-4" />
+              </button>
+            </div>
+
+            {creating ? (
+              <div>
+                <label className="mb-2 block text-xs font-medium text-white/50">
+                  Deck name
+                </label>
+                <input
+                  autoFocus
+                  value={newDeckName}
+                  onChange={(event) => setNewDeckName(event.target.value)}
+                  placeholder="e.g. Late night drive"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3.5 text-sm outline-none placeholder:text-white/25 focus:border-[#d7ff64]/50"
+                />
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => setCreating(false)}
+                    className="flex-1 rounded-full bg-white/10 py-3 text-xs font-semibold"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() =>
+                      newDeckName.trim() && saveTrack(null, newDeckName.trim())
+                    }
+                    disabled={!newDeckName.trim()}
+                    className="flex-1 rounded-full bg-[#d7ff64] py-3 text-xs font-semibold text-black disabled:opacity-40"
+                  >
+                    Create & add
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => setCreating(true)}
+                  className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-dashed border-white/15 p-3 text-left hover:border-white/30"
+                >
+                  <span className="grid size-11 place-items-center rounded-xl bg-[#d7ff64] text-xl text-black">
+                    +
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      New deck
+                    </span>
+                    <span className="mt-0.5 block text-[10px] text-white/35">
+                      Start a new collection
+                    </span>
+                  </span>
+                </button>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-white/30">
+                  Your decks
+                </p>
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {decks.map((deck, deckIndex) => (
+                    <button
+                      key={deck.name}
+                      onClick={() => saveTrack(deckIndex)}
+                      className="playlist-row flex w-full items-center gap-3 rounded-2xl p-3 text-left"
+                    >
+                      <span className="grid size-11 place-items-center rounded-xl bg-white/10">
+                        <Icon name="cards" className="size-5" />
+                      </span>
+                      <span className="flex-1">
+                        <span className="block text-sm font-semibold">
+                          {deck.name}
+                        </span>
+                        <span className="text-[10px] text-white/35">
+                          {deck.tracks.length} songs
+                        </span>
+                      </span>
+                      <Icon name="chevron" className="size-4 text-white/25" />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </main>
+  )
+}
+
+function LensPage() {
+  const [status, setStatus] = useState<"idle" | "listening" | "found">("idle")
+
+  useEffect(() => {
+    if (status !== "listening") return
+    const timer = window.setTimeout(() => setStatus("found"), 3200)
+    return () => window.clearTimeout(timer)
+  }, [status])
+
+  return (
+    <main className="page-content">
+      <Header eyebrow="Soundport Lens" title="Name that sound" />
+      <section className="flex min-h-[38rem] flex-col px-5">
+        <div className="mb-8 flex rounded-full border border-white/10 bg-white/[0.04] p-1">
+          <button className="flex-1 rounded-full bg-white py-2.5 text-xs font-semibold text-black">
+            Listen
+          </button>
+          <button className="flex-1 rounded-full py-2.5 text-xs font-semibold text-white/40">
+            Your history
+          </button>
+        </div>
+
+        <div className="relative flex flex-1 flex-col items-center justify-center">
+          <div
+            className={`lens-orbit orbit-outer ${
+              status === "listening" ? "is-listening" : ""
+            }`}
+          />
+          <div
+            className={`lens-orbit orbit-inner ${
+              status === "listening" ? "is-listening" : ""
+            }`}
+          />
+          <div className="absolute size-72 rounded-full bg-[#8b5cf6]/10 blur-3xl" />
+          <button
+            onClick={() =>
+              setStatus(status === "listening" ? "idle" : "listening")
+            }
+            className={`listen-core relative z-10 grid size-44 place-items-center rounded-full ${
+              status === "listening" ? "is-listening" : ""
+            }`}
+            aria-label={
+              status === "listening" ? "Stop listening" : "Start listening"
+            }
+          >
+            <div className="text-center">
+              <Icon
+                name={status === "listening" ? "waves" : "mic"}
+                className="mx-auto size-10"
+              />
+              <span className="mt-3 block text-xs font-bold uppercase tracking-[0.18em]">
+                {status === "listening" ? "Listening" : "Tap to listen"}
               </span>
             </div>
-            <div className="cover-card cover-card-right">
-              <img src={defaultArtists[2].image} alt="" />
+          </button>
+          {status === "listening" && (
+            <div className="absolute z-20 flex items-center gap-1">
+              {[0, 1, 2, 3, 4].map((bar) => (
+                <span
+                  key={bar}
+                  className="listen-bar"
+                  style={{ animationDelay: `${bar * 110}ms` }}
+                />
+              ))}
             </div>
-            <div className="music-orbit music-orbit-one"><span /></div>
-            <div className="music-orbit music-orbit-two"><span /></div>
-          </div>
+          )}
+        </div>
 
-          <div className="text-center">
-            <p className="eyebrow justify-center">One profile. Every platform.</p>
-            <h1 className="mx-auto mt-3 max-w-[9ch] text-[3.55rem] font-semibold leading-[0.88] tracking-[-0.07em]">
-              Your music has no borders.
-            </h1>
-            <p className="mx-auto mt-5 max-w-[32ch] text-sm leading-relaxed text-white/50">
-              Connect a music account to discover your taste, get better recommendations, and move playlists freely.
+        <div className="mb-8 mt-10 text-center">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em]">
+            {status === "listening"
+              ? "Hold that sound…"
+              : "Play it. Hum it. Find it."}
+          </h2>
+          <p className="mx-auto mt-2 max-w-[28ch] text-sm leading-relaxed text-white/40">
+            {status === "listening"
+              ? "Lens is separating melody from the noise."
+              : "Soundport Lens identifies music around you or the tune stuck in your head."}
+          </p>
+        </div>
+
+        <div className="glass-panel rounded-[1.6rem] p-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-11 place-items-center rounded-full bg-[#d7ff64]/10 text-[#d7ff64]">
+              <Icon name="spark" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold">Better humming matches</p>
+              <p className="mt-1 text-[10px] text-white/35">
+                Hum for at least 8 seconds in a quiet space.
+              </p>
+            </div>
+            <Icon name="chevron" className="size-4 text-white/25" />
+          </div>
+        </div>
+      </section>
+
+      {status === "found" && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 backdrop-blur-md">
+          <button
+            className="absolute inset-0"
+            onClick={() => setStatus("idle")}
+            aria-label="Close result"
+          />
+          <article className="result-sheet relative w-full max-w-md overflow-hidden rounded-[2rem] p-3">
+            <img
+              src={tracks[1].image}
+              alt="Slow Motion cover"
+              className="aspect-[1.15] w-full rounded-[1.45rem] object-cover"
+            />
+            <div className="p-4 pb-3">
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#d7ff64]">
+                <Icon name="check" className="size-4" />
+                Match found
+              </div>
+              <div className="flex items-end justify-between">
+                <div>
+                  <h2 className="text-3xl font-semibold tracking-[-0.05em]">
+                    Slow Motion
+                  </h2>
+                  <p className="mt-1 text-sm text-white/45">
+                    The Marías · Submarine
+                  </p>
+                </div>
+                <button className="grid size-12 place-items-center rounded-full bg-[#d7ff64] text-black">
+                  <Icon name="play" />
+                </button>
+              </div>
+              <button
+                onClick={() => setStatus("idle")}
+                className="mt-5 w-full rounded-full bg-white py-3.5 text-sm font-semibold text-black"
+              >
+                Add to my liked songs
+              </button>
+            </div>
+          </article>
+        </div>
+      )}
+    </main>
+  )
+}
+
+function SourceMark({ source }: { source: Source }) {
+  if (source === "deck") {
+    return (
+      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#d7ff64] text-black">
+        <Icon name="cards" className="size-5" />
+      </span>
+    )
+  }
+  return <PlatformMark platform={source} />
+}
+
+function MovePage({ decks }: { decks: UserDeck[] }) {
+  const [source, setSource] = useState<Source>("youtube")
+  const [destination, setDestination] = useState<Platform>("spotify")
+  const [selected, setSelected] = useState<number[]>([0])
+  const [moving, setMoving] = useState(false)
+  const [complete, setComplete] = useState(false)
+  const currentPlaylists =
+    source === "deck"
+      ? decks.map((deck, index) => ({
+          name: deck.name,
+          count: deck.tracks.length,
+          color: [
+            "from-[#4c5841] to-[#d7ff64]",
+            "from-[#49345e] to-[#aa7cff]",
+            "from-[#5f3438] to-[#ff817a]",
+          ][index % 3],
+        }))
+      : playlists[source]
+  const selectedTracks = useMemo(
+    () => selected.reduce((sum, item) => sum + currentPlaylists[item].count, 0),
+    [currentPlaylists, selected],
+  )
+
+  const swapSource = (nextSource: Source) => {
+    setSource(nextSource)
+    if (nextSource === "youtube") setDestination("spotify")
+    if (nextSource === "spotify") setDestination("youtube")
+    setSelected([0])
+    setComplete(false)
+  }
+
+  const migrate = () => {
+    if (!selected.length || moving) return
+    setMoving(true)
+    window.setTimeout(() => {
+      setMoving(false)
+      setComplete(true)
+    }, 1800)
+  }
+
+  return (
+    <main className="page-content">
+      <Header eyebrow="Playlist porter" title="Move your music" />
+      <section className="px-5">
+        <div className="platform-switch mb-7 grid grid-cols-3 rounded-full p-1">
+          {(["youtube", "spotify", "deck"] as Source[]).map((item) => (
+            <button
+              key={item}
+              onClick={() => swapSource(item)}
+              className={`flex items-center justify-center gap-1.5 rounded-full py-2.5 text-[11px] font-semibold capitalize transition ${
+                source === item
+                  ? "bg-white text-black shadow-xl"
+                  : "text-white/40"
+              }`}
+            >
+              {item === "deck" ? (
+                <Icon name="cards" className="size-4" />
+              ) : (
+                <PlatformMark platform={item} small />
+              )}
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-4 flex items-end justify-between">
+          <div>
+            <p className="text-xs text-white/40">
+              Choose from{" "}
+              {source === "youtube"
+                ? "YouTube"
+                : source === "spotify"
+                  ? "Spotify"
+                  : "your Soundport decks"}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold tracking-[-0.04em]">
+              {source === "deck" ? "Your decks" : "Your playlists"}
+            </h2>
+          </div>
+          <span className="text-[10px] font-semibold text-[#d7ff64]">
+            {selected.length} selected
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          {currentPlaylists.map((playlist, index) => {
+            const isSelected = selected.includes(index)
+            return (
+              <button
+                key={playlist.name}
+                onClick={() =>
+                  setSelected((items) =>
+                    isSelected
+                      ? items.filter((item) => item !== index)
+                      : [...items, index],
+                  )
+                }
+                className={`playlist-row flex w-full items-center gap-3 rounded-[1.35rem] p-2.5 text-left ${
+                  isSelected ? "is-selected" : ""
+                }`}
+              >
+                {source === "deck" && decks[index]?.tracks[0] ? (
+                  <img
+                    src={decks[index].tracks[0].image}
+                    alt=""
+                    className="size-14 shrink-0 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <span
+                    className={`grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${playlist.color}`}
+                  >
+                    <Icon
+                      name={source === "deck" ? "cards" : "waves"}
+                      className="size-5 text-black/65"
+                    />
+                  </span>
+                )}
+                <span className="flex-1">
+                  <span className="block text-sm font-semibold">
+                    {playlist.name}
+                  </span>
+                  <span className="mt-1 block text-[10px] text-white/35">
+                    {playlist.count} tracks
+                  </span>
+                </span>
+                <span
+                  className={`grid size-6 place-items-center rounded-full border ${
+                    isSelected
+                      ? "border-[#d7ff64] bg-[#d7ff64] text-black"
+                      : "border-white/15 text-transparent"
+                  }`}
+                >
+                  <Icon name="check" className="size-3.5" />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="migration-route relative my-6 flex items-center justify-between rounded-[1.5rem] p-4">
+          <div className="flex items-center gap-2">
+            <SourceMark source={source} />
+            <div>
+              <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">
+                From
+              </p>
+              <p className="text-xs font-semibold capitalize">{source}</p>
+            </div>
+          </div>
+          <div className="route-line flex flex-1 items-center px-4">
+            <span className="h-px flex-1 bg-gradient-to-r from-white/10 via-[#d7ff64] to-white/10" />
+            <Icon name="arrow" className="size-4 text-[#d7ff64]" />
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <p className="text-[9px] uppercase tracking-[0.14em] text-white/30">
+                To
+              </p>
+              <p className="text-xs font-semibold capitalize">{destination}</p>
+            </div>
+            <PlatformMark platform={destination} />
+          </div>
+        </div>
+
+        {source === "deck" && (
+          <div className="mb-5">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-white/30">
+              Send deck to
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["spotify", "youtube"] as Platform[]).map((platform) => (
+                <button
+                  key={platform}
+                  onClick={() => {
+                    setDestination(platform)
+                    setComplete(false)
+                  }}
+                  className={`flex items-center justify-center gap-2 rounded-2xl border py-3 text-xs font-semibold capitalize ${
+                    destination === platform
+                      ? "border-[#d7ff64]/40 bg-[#d7ff64]/10 text-white"
+                      : "border-white/10 bg-white/[0.03] text-white/40"
+                  }`}
+                >
+                  <PlatformMark platform={platform} small />
+                  {platform}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={migrate}
+          disabled={!selected.length || moving}
+          className={`move-cta flex w-full items-center justify-between rounded-full px-5 py-3.5 text-sm font-bold text-black ${
+            complete ? "is-complete" : ""
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <Icon name={complete ? "check" : "move"} className="size-5" />
+            {moving
+              ? `Moving ${selectedTracks} tracks…`
+              : complete
+                ? "Migration complete"
+                : `Move ${selectedTracks} tracks to ${
+                    destination === "spotify" ? "Spotify" : "YouTube"
+                  }`}
+          </span>
+          <span className="grid size-9 place-items-center rounded-full bg-black/10">
+            <Icon name={complete ? "check" : "arrow"} className="size-4" />
+          </span>
+          {moving && (
+            <span className="move-progress absolute bottom-0 left-0 h-1 rounded-full bg-black/35" />
+          )}
+        </button>
+
+        <p className="mt-3 text-center text-[10px] leading-relaxed text-white/30">
+          We’ll match every track and flag anything that needs your review.
+        </p>
+      </section>
+    </main>
+  )
+}
+
+function ProfilePage({ decks }: { decks: UserDeck[] }) {
+  const totalDeckTracks = decks.reduce(
+    (sum, deck) => sum + deck.tracks.length,
+    0,
+  )
+
+  return (
+    <main className="page-content">
+      <Header eyebrow="Music passport" title="Your profile" />
+      <section className="space-y-8 px-5">
+        <div className="passport-card relative overflow-hidden rounded-[2rem] p-5">
+          <div className="absolute -right-16 -top-12 size-48 rounded-full bg-[#8b5cf6]/60 blur-3xl" />
+          <div className="absolute -bottom-16 -left-12 size-44 rounded-full bg-[#d7ff64]/25 blur-3xl" />
+          <div className="relative flex items-start justify-between">
+            <img
+              src={tracks[0].image}
+              alt="Maya"
+              className="size-16 rounded-2xl object-cover"
+            />
+            <span className="rounded-full border border-white/15 bg-black/15 px-3 py-1.5 text-[10px] text-white/60">
+              Updated today
+            </span>
+          </div>
+          <div className="relative mt-16">
+            <p className="text-sm text-white/45">Maya’s sound is</p>
+            <h2 className="mt-2 max-w-[8ch] text-[3.4rem] font-semibold leading-[0.88] tracking-[-0.07em]">
+              Midnight Explorer
+            </h2>
+            <p className="mt-5 max-w-[28ch] text-sm leading-relaxed text-white/50">
+              Dreamy vocals, left-field R&B and songs made for the last train
+              home.
             </p>
           </div>
-        </section>
-
-        <section className="glass-panel glass-depth rounded-[2rem] p-3">
-          <button
-            onClick={() => connect("spotify")}
-            disabled={connecting !== null}
-            className="connect-button group flex w-full items-center gap-3 rounded-[1.35rem] p-3 text-left"
-          >
-            <PlatformMark platform="spotify" />
-            <span className="flex-1">
-              <span className="block text-sm font-semibold">
-                {connecting === "spotify" ? "Connecting..." : "Continue with Spotify"}
-              </span>
-              <span className="mt-0.5 block text-[10px] text-white/38">Sign in with Spotify account</span>
-            </span>
-            <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
-              <Icon name="arrow" className="size-4 rotate-180" />
-            </span>
-          </button>
-
-          <div className="my-1 flex items-center gap-3 px-3">
-            <span className="h-px flex-1 bg-white/[0.07]" />
-            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/25">or</span>
-            <span className="h-px flex-1 bg-white/[0.07]" />
-          </div>
-
-          <button
-            onClick={() => connect("youtube")}
-            disabled={connecting !== null}
-            className="connect-button group flex w-full items-center gap-3 rounded-[1.35rem] p-3 text-left"
-          >
-            <PlatformMark platform="youtube" />
-            <span className="flex-1">
-              <span className="block text-sm font-semibold">
-                {connecting === "youtube" ? "Connecting..." : "Continue with YouTube"}
-              </span>
-              <span className="mt-0.5 block text-[10px] text-white/38">Sign in with Google / YouTube</span>
-            </span>
-            <span className="grid size-8 place-items-center rounded-full border border-white/10 text-white/45 transition group-hover:translate-x-0.5 group-hover:border-white/25 group-hover:text-white">
-              <Icon name="arrow" className="size-4 rotate-180" />
-            </span>
-          </button>
-        </section>
-
-        <div className="mt-5 flex items-center justify-center gap-2 text-center text-[10px] leading-relaxed text-white/30">
-          <svg className="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <rect x="5" y="10" width="14" height="11" rx="2" />
-            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-          </svg>
-          Your personal taste graph is encrypted and decentralized.
         </div>
-      </main>
-    </div>
-  );
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d7ff64]">
+            This month
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em]">
+            Your listening
+          </h2>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              ["82%", "Discovery"],
+              [String(decks.length), "Decks"],
+              [String(totalDeckTracks), "Saved"],
+            ].map(([value, label]) => (
+              <div key={label} className="glass-panel rounded-[1.3rem] p-3">
+                <p className="text-2xl font-semibold tracking-[-0.05em]">
+                  {value}
+                </p>
+                <p className="mt-1 text-[10px] text-white/35">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-4 flex items-end justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#d7ff64]">
+                On repeat
+              </p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em]">
+                Top artists
+              </h2>
+            </div>
+            <span className="text-xs text-white/35">Last 30 days</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {tracks.map((track, index) => (
+              <div key={track.artist}>
+                <div className="relative aspect-square overflow-hidden rounded-2xl">
+                  <img
+                    src={track.image}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                  <span className="absolute left-2 top-2 text-[10px] font-bold">
+                    0{index + 1}
+                  </span>
+                </div>
+                <p className="mt-2 truncate text-[10px] font-medium">
+                  {track.artist}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-panel flex items-center gap-4 rounded-[1.5rem] p-4">
+          <span className="grid size-14 place-items-center rounded-2xl bg-[#d7ff64] text-black">
+            <Icon name="move" className="size-6" />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold">Bridge Builder</p>
+            <p className="mt-1 text-[10px] text-white/35">
+              Moved music between both worlds.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold uppercase text-[#d7ff64]">
+            Rare
+          </span>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function Navigation({
+  active,
+  onChange,
+}: {
+  active: Tab
+  onChange: (tab: Tab) => void
+}) {
+  const items: { id: Tab icon: IconName label: string }[] = [
+    { id: "deck", icon: "cards", label: "Deck" },
+    { id: "lens", icon: "lens", label: "Lens" },
+    { id: "move", icon: "move", label: "Move" },
+    { id: "profile", icon: "user", label: "Profile" },
+  ]
+
+  return (
+    <nav className="glass-nav fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-[416px] -translate-x-1/2 items-center rounded-full p-1.5">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => onChange(item.id)}
+          className={`relative flex flex-1 items-center justify-center gap-2 rounded-full py-3 text-xs font-semibold transition ${
+            active === item.id
+              ? "bg-white text-black"
+              : "text-white/40 hover:text-white"
+          }`}
+        >
+          <Icon name={item.icon} className="size-[18px]" />
+          {item.label}
+          {item.id === "lens" && active !== "lens" && (
+            <span className="absolute right-[22%] top-2 size-1.5 rounded-full bg-[#d7ff64]" />
+          )}
+        </button>
+      ))}
+    </nav>
+  )
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<"landing" | "profile">("profile");
+  const [active, setActive] = useState<Tab>("deck")
+  const [decks, setDecks] = useState<UserDeck[]>([
+    { name: "Night drive", tracks: [tracks[1], tracks[3]] },
+    { name: "Soft focus", tracks: [tracks[2]] },
+  ])
 
-  return screen === "landing" ? (
-    <LandingScreen onConnect={() => setScreen("profile")} />
-  ) : (
-    <ProfileScreen onBack={() => setScreen("landing")} />
-  );
+  const addToDeck = (deckIndex: number | null, name: string, track: Track) => {
+    setDecks((currentDecks) => {
+      if (deckIndex === null) {
+        return [...currentDecks, { name, tracks: [track] }]
+      }
+      return currentDecks.map((deck, index) =>
+        index === deckIndex &&
+        !deck.tracks.some((item) => item.title === track.title)
+          ? { ...deck, tracks: [...deck.tracks, track] }
+          : deck,
+      )
+    })
+  }
+
+  return (
+    <div className={`app-shell min-h-screen text-[#f4f3ee] tab-${active}`}>
+      <div className="ambient-orb ambient-orb-one" />
+      <div className="ambient-orb ambient-orb-two" />
+      <div className="noise-layer" />
+      <div className="relative z-10 mx-auto min-h-screen max-w-md overflow-hidden pb-28">
+        {active === "deck" && (
+          <DeckPage decks={decks} onAddToDeck={addToDeck} />
+        )}
+        {active === "lens" && <LensPage />}
+        {active === "move" && <MovePage decks={decks} />}
+        {active === "profile" && <ProfilePage decks={decks} />}
+      </div>
+      <Navigation active={active} onChange={setActive} />
+    </div>
+  )
 }

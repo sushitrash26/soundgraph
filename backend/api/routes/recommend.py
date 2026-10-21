@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from backend.graph.queries import GraphQueries
 from backend.services.acoustic_lens import AcousticLensService
+from backend.services.event_logger import EventLogger
+from backend.core.logger import logger
 from backend.api.routes.auth import SESSION_STORE
 
 router = APIRouter(tags=["Recommendations & Analytics"])
@@ -200,6 +202,49 @@ def visual_vibe_search(payload: ImageVibeRequest):
         text_hint=payload.text_hint
     )
 
+class LensHistoryItemRequest(BaseModel):
+    user_id: Optional[str] = None
+    title: str
+    artist: str
+    album: Optional[str] = ""
+    thumbnail: Optional[str] = ""
+    youtube_url: Optional[str] = ""
+    spotify_url: Optional[str] = ""
+    preview_url: Optional[str] = ""
+    confidence: Optional[float] = 0.95
+    mode: Optional[str] = "AUDIO"
+
+def _record_lens_match_history(res: Dict[str, Any], user_id: str):
+    """Auto-logs recognized tracks into SQLite 30-day lens history."""
+    try:
+        if not isinstance(res, dict):
+            return
+        status = res.get("status")
+        if status in ("success", "candidates"):
+            match_data = res.get("match") or res.get("top_match") or res
+            title = match_data.get("title") or match_data.get("name") or res.get("detected_title") or "Unknown Title"
+            artist = match_data.get("artist") or (match_data.get("artists")[0] if isinstance(match_data.get("artists"), list) and match_data.get("artists") else "") or res.get("detected_artist") or "Unknown Artist"
+            thumb = match_data.get("thumbnail") or match_data.get("cover_url") or ""
+            yt_url = match_data.get("youtube_url") or match_data.get("watch_url") or ""
+            spot_url = match_data.get("spotify_url") or ""
+            prev_url = match_data.get("preview_url") or yt_url
+            conf = res.get("confidence") or match_data.get("confidence") or 0.95
+            mode = res.get("mode") or "AUDIO"
+            EventLogger.get_instance().log_lens_search(
+                user_id=user_id,
+                title=title,
+                artist=artist,
+                album=match_data.get("album", ""),
+                thumbnail=thumb,
+                youtube_url=yt_url,
+                spotify_url=spot_url,
+                preview_url=prev_url,
+                confidence=conf,
+                mode=mode
+            )
+    except Exception as e:
+        logger.warning(f"Lens history auto-log failed: {e}")
+
 @router.post("/vibe/identify-audio")
 async def identify_audio_snippet(
     file: UploadFile = File(...),
@@ -209,12 +254,14 @@ async def identify_audio_snippet(
     uid = resolve_uid(user_id)
     audio_bytes = await file.read()
     mime_type = file.content_type or "audio/webm"
-    return await AcousticLensService.identify_audio(
+    result = await AcousticLensService.identify_audio(
         audio_bytes=audio_bytes,
         mime_type=mime_type,
         user_id=uid,
         text_hint=hint
     )
+    _record_lens_match_history(result, uid)
+    return result
 
 @router.post("/vibe/identify-audio-base64")
 async def identify_audio_base64(payload: AudioVibeRequest):
@@ -223,12 +270,44 @@ async def identify_audio_base64(payload: AudioVibeRequest):
         audio_bytes = base64.b64decode(payload.audio_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 audio data: {e}")
-    return await AcousticLensService.identify_audio(
+    result = await AcousticLensService.identify_audio(
         audio_bytes=audio_bytes,
         mime_type=payload.mime_type or "audio/m4a",
         user_id=uid,
         text_hint=payload.hint
     )
+    _record_lens_match_history(result, uid)
+    return result
+
+@router.get("/vibe/history")
+def get_vibe_history(user_id: Optional[str] = Query(None), days: int = Query(30)):
+    """Retrieves lens search history for the user within the last 30 days."""
+    uid = resolve_uid(user_id)
+    return EventLogger.get_instance().get_lens_history(user_id=uid, days=days)
+
+@router.post("/vibe/history")
+def add_vibe_history(payload: LensHistoryItemRequest):
+    """Manually records an audio search or match to the 30-day history."""
+    uid = resolve_uid(payload.user_id)
+    search_id = EventLogger.get_instance().log_lens_search(
+        user_id=uid,
+        title=payload.title,
+        artist=payload.artist,
+        album=payload.album or "",
+        thumbnail=payload.thumbnail or "",
+        youtube_url=payload.youtube_url or "",
+        spotify_url=payload.spotify_url or "",
+        preview_url=payload.preview_url or "",
+        confidence=payload.confidence or 0.95,
+        mode=payload.mode or "AUDIO"
+    )
+    return {"status": "success", "id": search_id}
+
+@router.delete("/vibe/history")
+def clear_vibe_history(user_id: Optional[str] = Query(None)):
+    uid = resolve_uid(user_id)
+    deleted = EventLogger.get_instance().clear_lens_history(user_id=uid)
+    return {"status": "success", "deleted": deleted}
 
 @router.get("/vibe/suggestions")
 def get_vibe_suggestions(user_id: Optional[str] = Query(None)):

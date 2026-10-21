@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 pw.txt
+Neo4j-*.txt
+cloud.txt
+msfinstall
 credentials.json
 token.json
 .spotify_cache

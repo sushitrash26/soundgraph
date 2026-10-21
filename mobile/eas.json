@@ -11,6 +11,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_BASE": "https://soundgraph-1063139773680.europe-west1.run.app"
       }
     },
     "production": {

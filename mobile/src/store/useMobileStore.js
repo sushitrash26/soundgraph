@@ -59,8 +59,54 @@ export const useMobileStore = create((set, get) => ({
   playingTrackId: null,
   isPlayingAudio: false,
 
-  // User Decks State
-  userDecks: [],
+  // User Decks State (Custom user curated decks matching profile/App.jsx)
+  userDecks: [
+    {
+      id: 'deck_night_drive',
+      name: 'Night drive',
+      tracks: [
+        {
+          id: 'spotify:track:starboy',
+          track_id: 'spotify:track:starboy',
+          title: 'After Dark',
+          artist: 'Luna Vale',
+          cover_url: 'https://images.unsplash.com/photo-1770335435091-75e3f07cd5e8?auto=format&fit=crop&w=900&q=88',
+          image: 'https://images.unsplash.com/photo-1770335435091-75e3f07cd5e8?auto=format&fit=crop&w=900&q=88',
+          tags: ['Alt pop', 'Nocturnal'],
+          color: '#b263ff',
+          match: 96
+        },
+        {
+          id: 'spotify:track:midnight_city',
+          track_id: 'spotify:track:midnight_city',
+          title: 'Night Drive',
+          artist: 'Milo Grey',
+          cover_url: 'https://images.unsplash.com/photo-1608649443926-1e224443ef88?auto=format&fit=crop&w=900&q=88',
+          image: 'https://images.unsplash.com/photo-1608649443926-1e224443ef88?auto=format&fit=crop&w=900&q=88',
+          tags: ['Indie', 'Warm'],
+          color: '#d7ff64',
+          match: 87
+        }
+      ]
+    },
+    {
+      id: 'deck_soft_focus',
+      name: 'Soft focus',
+      tracks: [
+        {
+          id: 'hydrated:snooze:sza',
+          track_id: 'hydrated:snooze:sza',
+          title: 'Soft Static',
+          artist: 'Amaya Blue',
+          cover_url: 'https://images.unsplash.com/photo-1543868849-ca832301484f?auto=format&fit=crop&w=900&q=88',
+          image: 'https://images.unsplash.com/photo-1543868849-ca832301484f?auto=format&fit=crop&w=900&q=88',
+          tags: ['R&B', 'Airy'],
+          color: '#62a7ff',
+          match: 89
+        }
+      ]
+    }
+  ],
   isLoadingDecks: false,
 
   // Platform Migration States
@@ -91,6 +137,7 @@ export const useMobileStore = create((set, get) => ({
     set({ isConnecting: true, connectionError: null });
     const candidates = [
       get().apiBase,
+      'https://soundgraph-1063139773680.europe-west1.run.app',
       'http://192.168.0.6:8001',
       'http://127.0.0.1:8001'
     ].filter(Boolean);
@@ -688,11 +735,127 @@ export const useMobileStore = create((set, get) => ({
       const user = get().user;
       const query = user?.id ? `?user_id=${encodeURIComponent(user.id)}` : '';
       const res = await axios.get(`${get().getApiBase()}/decks${query}`);
-      set({ userDecks: Array.isArray(res.data) ? res.data : [], isLoadingDecks: false });
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        const backendDecks = res.data.map((d) => ({
+          id: d.id,
+          name: d.name,
+          tracks: Array.isArray(d.tracks) ? d.tracks : [],
+          cover_url: d.cover_url || ''
+        }));
+        const current = get().userDecks;
+        const merged = [...current];
+        for (const bd of backendDecks) {
+          if (!merged.some((m) => m.id === bd.id || m.name.toLowerCase() === bd.name.toLowerCase())) {
+            merged.push(bd);
+          }
+        }
+        set({ userDecks: merged, isLoadingDecks: false });
+      } else {
+        set({ isLoadingDecks: false });
+      }
     } catch (e) {
       console.warn('Error fetching user decks:', e.message);
       set({ isLoadingDecks: false });
     }
+  },
+
+  addTrackToCustomDeck: async (deckIndexOrId, track) => {
+    if (!track) return;
+    const { userDecks } = get();
+    const normalizedTrack = {
+      id: track.track_id || track.id || `track_${Date.now()}`,
+      track_id: track.track_id || track.id || `track_${Date.now()}`,
+      title: track.title || track.name || track.track_name || 'Untitled Song',
+      artist: track.artist || (Array.isArray(track.artists) ? track.artists.join(', ') : 'Featured Artist'),
+      cover_url: track.cover_url || track.image || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
+      image: track.cover_url || track.image || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
+      preview_url: track.preview_url || '',
+      tags: track.tags || ['Curated', 'Deck'],
+      color: track.color || '#d7ff64',
+      match: track.match || 92
+    };
+
+    let targetDeckId = null;
+    const updated = userDecks.map((deck, idx) => {
+      const isMatch =
+        (typeof deckIndexOrId === 'number' && idx === deckIndexOrId) ||
+        deck.id === deckIndexOrId ||
+        deck.name.toLowerCase() === String(deckIndexOrId).toLowerCase();
+
+      if (isMatch) {
+        targetDeckId = deck.id;
+        const exists = deck.tracks.some(
+          (t) =>
+            (t.id && t.id === normalizedTrack.id) ||
+            (t.title && t.title.toLowerCase() === normalizedTrack.title.toLowerCase())
+        );
+        if (exists) return deck;
+        return {
+          ...deck,
+          tracks: [normalizedTrack, ...deck.tracks]
+        };
+      }
+      return deck;
+    });
+
+    set({ userDecks: updated });
+
+    if (targetDeckId) {
+      try {
+        await axios.post(`${get().getApiBase()}/decks/${targetDeckId}/tracks`, {
+          track_id: normalizedTrack.track_id
+        });
+      } catch (e) {
+        // non-fatal offline deck sync
+      }
+    }
+  },
+
+  createCustomDeck: async (deckName, initialTrack = null) => {
+    const cleanName = (deckName || '').trim();
+    if (!cleanName) return null;
+
+    const newDeckId = `deck_${Date.now()}`;
+    const initialTracks = [];
+    if (initialTrack) {
+      initialTracks.push({
+        id: initialTrack.track_id || initialTrack.id || `track_${Date.now()}`,
+        track_id: initialTrack.track_id || initialTrack.id || `track_${Date.now()}`,
+        title: initialTrack.title || initialTrack.name || 'Untitled Song',
+        artist: initialTrack.artist || 'Featured Artist',
+        cover_url: initialTrack.cover_url || initialTrack.image || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
+        image: initialTrack.cover_url || initialTrack.image || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
+        preview_url: initialTrack.preview_url || '',
+        tags: initialTrack.tags || ['New Deck'],
+        color: '#d7ff64',
+        match: 95
+      });
+    }
+
+    const newDeck = {
+      id: newDeckId,
+      name: cleanName,
+      tracks: initialTracks,
+      cover_url: initialTracks[0]?.cover_url || ''
+    };
+
+    set((prev) => ({
+      userDecks: [newDeck, ...prev.userDecks]
+    }));
+
+    try {
+      const user = get().user;
+      await axios.post(`${get().getApiBase()}/decks`, {
+        user_id: user?.id || undefined,
+        name: cleanName,
+        mood: 'custom',
+        track_ids: initialTracks.map((t) => t.track_id)
+      });
+    } catch (e) {
+      // non-fatal offline sync
+    }
+
+    return newDeck;
   },
 
   // Platform Migration States

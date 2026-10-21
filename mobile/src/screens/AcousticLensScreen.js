@@ -1,67 +1,84 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  Pressable, 
-  ActivityIndicator, 
-  Image, 
-  ScrollView, 
-  Linking 
+import {
+  StyleSheet,
+  View,
+  Text,
+  Pressable,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  Linking,
+  Dimensions,
+  Modal
 } from 'react-native';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import axios from 'axios';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import { 
-  useAudioRecorder, 
-  RecordingPresets, 
-  requestRecordingPermissionsAsync, 
-  setAudioModeAsync 
+import {
+  useAudioRecorder,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync
 } from 'expo-audio';
-import { 
-  Radio, 
-  Mic, 
-  Sparkles, 
-  Volume2, 
-  Activity, 
-  Check, 
-  Square, 
-  RefreshCcw, 
-  Plus, 
+import {
+  Mic,
+  Sparkles,
+  Check,
+  Play,
+  Pause,
   ExternalLink,
-  AlertCircle
+  ChevronRight,
+  Layers,
+  Clock,
+  Radio,
+  Music2,
+  X,
+  Volume2
 } from 'lucide-react-native';
 import { THEME } from '../theme/theme';
 import { API_BASE, PORT, LAN_HOST_IP } from '../api/config';
 import { useMobileStore } from '../store/useMobileStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AmbientGlassBackground from '../components/AmbientGlassBackground';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function AcousticLensScreen() {
   const insets = useSafeAreaInsets();
-  const { user, addCardToDeck, getApiBase } = useMobileStore();
+  const {
+    user,
+    getApiBase,
+    toggleAudioPreview,
+    playingTrackId,
+    isPlayingAudio,
+    addTrackToCustomDeck
+  } = useMobileStore();
 
-  const MAX_RECORD_SECONDS = 6;
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [activeTab, setActiveTab] = useState('listen'); // 'listen' | 'history'
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [historyItems, setHistoryItems] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [pulse, setPulse] = useState(1);
+
+  const MAX_RECORD_SECONDS = 7;
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const secondsTimerRef = useRef(null);
   const pulseTimerRef = useRef(null);
   const startTimeRef = useRef(0);
 
-  // Accurate 1-second timer loop while recording (snappy 6-second auto-stop)
+  // Pulse animation during recording
   useEffect(() => {
     if (isRecording) {
       startTimeRef.current = Date.now();
       secondsTimerRef.current = setInterval(() => {
         setRecordSeconds((s) => {
           if (s >= MAX_RECORD_SECONDS - 1) {
-            // Auto stop after 6 seconds of recording for snappy UX
             stopAndAnalyze();
             return MAX_RECORD_SECONDS;
           }
@@ -69,13 +86,12 @@ export default function AcousticLensScreen() {
         });
       }, 1000);
 
-      // Smooth visual radar pulse (independent from seconds timer)
       let direction = 1;
       pulseTimerRef.current = setInterval(() => {
         setPulse((p) => {
-          if (p >= 1.35) direction = -1;
+          if (p >= 1.25) direction = -1;
           if (p <= 1.0) direction = 1;
-          return Number((p + direction * 0.05).toFixed(2));
+          return Number((p + direction * 0.04).toFixed(2));
         });
       }, 100);
     } else {
@@ -89,22 +105,43 @@ export default function AcousticLensScreen() {
     };
   }, [isRecording]);
 
+  // Load history when tab switches to 'history'
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetch30DayHistory();
+    }
+  }, [activeTab]);
+
+  const fetch30DayHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const base = (getApiBase && getApiBase()) || API_BASE;
+      const uid = user?.id ? `?user_id=${encodeURIComponent(user.id)}&days=30` : '?days=30';
+      const res = await axios.get(`${base}/vibe/history${uid}`);
+      if (Array.isArray(res.data)) {
+        setHistoryItems(res.data);
+      }
+    } catch (e) {
+      console.warn('Error fetching 30-day lens history:', e.message);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   const startRecording = async () => {
     try {
       setErrorMessage(null);
       setAnalysisResult(null);
 
-      // 1. Explicitly request real hardware microphone permissions
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
         setErrorMessage(
-          'Microphone permission is required to listen to real audio. Please enable microphone access for Expo Go in your phone settings.'
+          'Microphone permission is required to listen to real audio. Please enable microphone in phone settings.'
         );
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
 
-      // 2. Set audio mode for real hardware recording
       try {
         await setAudioModeAsync({
           allowsRecording: true,
@@ -114,7 +151,6 @@ export default function AcousticLensScreen() {
         // non-fatal
       }
 
-      // 3. Prepare and start real recording
       await recorder.prepareToRecordAsync();
       startTimeRef.current = Date.now();
       recorder.record();
@@ -141,9 +177,9 @@ export default function AcousticLensScreen() {
       }
 
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      if (elapsed < 1.8) {
+      if (elapsed < 1.5) {
         setIsAnalyzing(false);
-        setErrorMessage(`Recording was only ${elapsed.toFixed(1)}s. Please sing, hum, or play music for at least 3-4 seconds!`);
+        setErrorMessage(`Recording was only ${elapsed.toFixed(1)}s. Please hold for at least 3 seconds!`);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         return;
       }
@@ -153,21 +189,18 @@ export default function AcousticLensScreen() {
       setErrorMessage(null);
 
       const recordedUri = recorder.uri;
-
       if (!recordedUri) {
         setIsAnalyzing(false);
-        setErrorMessage('No audio data captured. Please hold your microphone closer and try again.');
+        setErrorMessage('No audio data captured. Please try again.');
         return;
       }
 
-      // Read real hardware audio recording as Base64 (supporting legacy and modern File API)
       let base64Audio = null;
       try {
         base64Audio = await FileSystem.readAsStringAsync(recordedUri, {
           encoding: FileSystem.EncodingType.Base64,
         });
       } catch (readErr) {
-        console.warn('legacy readAsStringAsync failed, attempting File fallback:', readErr);
         try {
           const file = new File(recordedUri);
           const bytes = await file.bytes();
@@ -184,11 +217,10 @@ export default function AcousticLensScreen() {
 
       if (!base64Audio) {
         setIsAnalyzing(false);
-        setErrorMessage('Could not read recorded audio data from device storage. Please try again.');
+        setErrorMessage('Could not read audio data. Please try again.');
         return;
       }
 
-      // Send to FastAPI base64 endpoint (with automatic dynamic LAN IP failover)
       const primaryBase = (getApiBase && getApiBase()) || API_BASE;
       const candidates = [
         primaryBase,
@@ -222,7 +254,6 @@ export default function AcousticLensScreen() {
           }
         } catch (postErr) {
           lastErr = postErr;
-          console.warn(`AcousticLens probe failed on ${base}:`, postErr.message);
         }
       }
 
@@ -236,662 +267,850 @@ export default function AcousticLensScreen() {
       if (data.status === 'success' || data.status === 'candidates') {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setAnalysisResult(data);
+        // Refresh history cache in background
+        fetch30DayHistory();
       } else {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setErrorMessage(
-          data.message || 'No clear singing, melody, or music was recognized. Please try singing a chorus or holding phone closer to speaker!'
+          data.message || 'No clear singing or music was recognized. Please try humming in a quieter spot or holding closer to speaker!'
         );
       }
     } catch (err) {
       console.warn('Analysis error:', err);
       setIsAnalyzing(false);
-      const detail = err.response?.data?.detail || err.message || 'Network error during analysis';
-      if (err.response || err.code === 'ECONNABORTED' || (err.message && err.message.includes('Network'))) {
-        setErrorMessage(`${detail}. Make sure FastAPI backend is reachable on your PC.`);
-      } else {
-        setErrorMessage(detail);
-      }
+      setErrorMessage(err.response?.data?.detail || err.message || 'Audio identification error');
     }
   };
 
-  const formatTimer = (totalSeconds) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  const matchedTrack = analysisResult?.match || analysisResult?.top_match || analysisResult;
+  const matchTitle = matchedTrack?.title || matchedTrack?.name || 'Identified Track';
+  const matchArtist = matchedTrack?.artist || (Array.isArray(matchedTrack?.artists) ? matchedTrack.artists.join(', ') : 'Featured Artist');
+  const matchCover = matchedTrack?.thumbnail || matchedTrack?.cover_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600';
+  const matchConfidence = Math.round((analysisResult?.confidence || 0.95) * 100);
+
+  const isPlayingMatched = isPlayingAudio && playingTrackId === (matchedTrack?.track_id || matchedTrack?.id);
+
+  const handleAddMatchedToCustomDeck = () => {
+    if (!matchedTrack) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    addTrackToCustomDeck(0, {
+      id: matchedTrack.track_id || matchedTrack.id || `rec_${Date.now()}`,
+      title: matchTitle,
+      artist: matchArtist,
+      cover_url: matchCover,
+      preview_url: matchedTrack.preview_url || matchedTrack.youtube_url || ''
+    });
+    setAnalysisResult(null);
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: Math.max(insets.top + 6, 20),
-          paddingBottom: Math.max(insets.bottom + 80, 100)
-        }
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
+    <View style={[
+      styles.container,
+      {
+        paddingTop: Math.max(insets.top + 6, 12),
+        paddingBottom: Math.max(insets.bottom + 80, 94)
+      }
+    ]}>
+      <AmbientGlassBackground />
+
+      {/* Header matching profile/App.jsx */}
       <View style={styles.header}>
-        <Text style={styles.title}>Acoustic Lens</Text>
-        <Text style={styles.subtitle}>
-          Real-time microphone capture · Gemini 3.5 Flash DSP · Neo4j Graph-RAG
-        </Text>
+        <Text style={styles.eyebrow}>SOUNDPORT LENS</Text>
+        <Text style={styles.title}>Name that sound</Text>
       </View>
 
-      {/* Center Microphone Radar Orb */}
-      <View style={styles.radarContainer}>
-        {/* Animated Radial Pulse Rings */}
-        <View style={[styles.pulseRing, { transform: [{ scale: isRecording ? pulse : 1 }] }]} />
-        <View style={[styles.pulseRingInner, { transform: [{ scale: isRecording ? pulse * 0.85 : 1 }] }]} />
-
-        {/* Center Microphone Button */}
+      {/* Segmented Pill Switcher: [ Listen ] [ Your history ] */}
+      <View style={styles.pillSwitcherWrapper}>
         <Pressable
           style={[
-            styles.centerOrb,
-            isRecording && styles.centerOrbRecording,
-            isAnalyzing && styles.centerOrbAnalyzing
+            styles.pillTab,
+            activeTab === 'listen' ? styles.pillTabActive : styles.pillTabInactive
           ]}
-          disabled={isAnalyzing}
-          onPress={isRecording ? stopAndAnalyze : startRecording}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab('listen');
+          }}
         >
-          {isAnalyzing ? (
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          ) : isRecording ? (
-            <Square size={32} color="#FFFFFF" fill="#FFFFFF" />
-          ) : (
-            <Mic size={38} color="#FFFFFF" strokeWidth={2.2} />
-          )}
+          <Text
+            style={[
+              styles.pillTabText,
+              activeTab === 'listen' ? styles.pillTabTextActive : styles.pillTabTextInactive
+            ]}
+          >
+            Listen
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.pillTab,
+            activeTab === 'history' ? styles.pillTabActive : styles.pillTabInactive
+          ]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab('history');
+          }}
+        >
+          <Text
+            style={[
+              styles.pillTabText,
+              activeTab === 'history' ? styles.pillTabTextActive : styles.pillTabTextInactive
+            ]}
+          >
+            Your history
+          </Text>
         </Pressable>
       </View>
 
-      {/* Recording Status & Live Timer */}
-      <View style={styles.statusBox}>
-        {isAnalyzing ? (
-          <View style={styles.statusRow}>
-            <ActivityIndicator size="small" color={THEME.colors.accent} />
-            <Text style={styles.statusText}>Analyzing Audio Spectrum with Graph-RAG...</Text>
+      {/* TAB CONTENT: LISTEN */}
+      {activeTab === 'listen' && (
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={styles.scrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Radar Visualization Arena matching profile/App.jsx */}
+          <View style={styles.radarArena}>
+            {/* Ambient Purple Blur Glow */}
+            <View style={styles.ambientPurpleGlow} />
+
+            {/* Concentric Orbits */}
+            <View
+              style={[
+                styles.lensOrbit,
+                styles.orbitOuter,
+                isRecording && { transform: [{ scale: pulse * 1.08 }] }
+              ]}
+            />
+            <View
+              style={[
+                styles.lensOrbit,
+                styles.orbitInner,
+                isRecording && { transform: [{ scale: pulse }] }
+              ]}
+            />
+
+            {/* Center Core Microphone Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.listenCore,
+                isRecording && styles.listenCoreActive,
+                pressed && { transform: [{ scale: 0.95 }] }
+              ]}
+              disabled={isAnalyzing}
+              onPress={isRecording ? stopAndAnalyze : startRecording}
+            >
+              {isAnalyzing ? (
+                <View style={styles.analyzingCenter}>
+                  <ActivityIndicator size="large" color="#d7ff64" />
+                  <Text style={styles.analyzingText}>Identifying…</Text>
+                </View>
+              ) : isRecording ? (
+                <View style={styles.listeningCenter}>
+                  <Volume2 size={38} color="#000000" strokeWidth={2.4} />
+                  <Text style={styles.listeningText}>Listening</Text>
+                  <Text style={styles.recordTimerText}>{recordSeconds}s / {MAX_RECORD_SECONDS}s</Text>
+                </View>
+              ) : (
+                <View style={styles.idleCenter}>
+                  <Mic size={42} color="#000000" strokeWidth={2.4} />
+                  <Text style={styles.tapToListenText}>Tap to listen</Text>
+                </View>
+              )}
+            </Pressable>
+
+            {/* Animated Equalizer Wave Bars while listening */}
+            {isRecording && (
+              <View style={styles.listeningBarsRow}>
+                {[4, 8, 14, 18, 12, 6].map((h, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.listeningBar,
+                      { height: Math.max(6, (h * pulse).toFixed(0)) }
+                    ]}
+                  />
+                ))}
+              </View>
+            )}
           </View>
-        ) : isRecording ? (
-          <View style={styles.statusRow}>
-            <View style={styles.recordingDot} />
-            <Text style={[styles.statusText, { color: recordSeconds >= 3 ? '#10B981' : '#EF4444' }]}>
-              {recordSeconds >= 3 ? '⚡ Tap Orb to identify now • ' : 'Listening: '}
-              {formatTimer(recordSeconds)} / {formatTimer(MAX_RECORD_SECONDS)}
+
+          {/* Status Message Text */}
+          <View style={styles.statusSection}>
+            <Text style={styles.statusTitle}>
+              {isAnalyzing
+                ? 'Synthesizing with HexaSonic…'
+                : isRecording
+                  ? 'Hold that sound…'
+                  : 'Play it. Hum it. Find it.'}
+            </Text>
+            <Text style={styles.statusSubtitle}>
+              {isAnalyzing
+                ? 'Searching 100M+ global audio landmark acoustic constellations.'
+                : isRecording
+                  ? 'Lens is separating melody from background acoustic noise.'
+                  : 'Soundport Lens identifies music around you or the tune stuck in your head.'}
             </Text>
           </View>
-        ) : (
-          <Text style={styles.statusText}>
-            Tap Orb to Sing, Hum, or Identify Ambient Music
-          </Text>
-        )}
-      </View>
 
-      {/* Error / Permission Banner */}
-      {errorMessage && (
-        <View style={styles.errorCard}>
-          <AlertCircle size={18} color="#EF4444" />
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      )}
-
-      {/* Real Hardware Analysis Result Card */}
-      {analysisResult && (
-        <View style={styles.resultCard}>
-          <View style={styles.resultHeader}>
-            <Sparkles size={16} color={THEME.colors.accent} />
-            <Text style={styles.resultHeaderTitle}>
-              {analysisResult.match_tier === 'tier1_landmark'
-                ? '⚡ Landmark Master Match'
-                : analysisResult.status === 'candidates'
-                ? '🎶 Melodic Candidates'
-                : '🧠 Neuro-Acoustic Match'}
-            </Text>
-            <View style={[
-              styles.confidenceBadge,
-              analysisResult.status === 'candidates' && { backgroundColor: 'rgba(234, 179, 8, 0.15)', borderColor: 'rgba(234, 179, 8, 0.4)' }
-            ]}>
-              <Text style={[
-                styles.confidenceText,
-                analysisResult.status === 'candidates' && { color: '#EAB308' }
-              ]}>
-                {Math.round((analysisResult.confidence || 0.9) * 100)}% Confident
-              </Text>
+          {errorMessage && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{errorMessage}</Text>
             </View>
-          </View>
-
-          {analysisResult.mode === 'CHIMERIC_MASHUP_DETECTED' ? (
-            /* DUAL-CARD MASHUP VIEW */
-            <View style={styles.mashupContainer}>
-              <View style={styles.mashupNotice}>
-                <Sparkles size={16} color="#EC4899" />
-                <Text style={styles.mashupNoticeText}>
-                  {analysisResult.explanation || 'Chimeric Mashup Detected!'}
-                </Text>
-              </View>
-
-              {/* Card 1: Matched Sung Lyrics */}
-              {analysisResult.lyric_match && (
-                <View style={styles.mashupCard}>
-                  <View style={styles.mashupCardHeader}>
-                    <Text style={styles.mashupBadgeText}>📝 MATCHED YOUR SUNG LYRICS</Text>
-                    <Text style={styles.mashupConfText}>
-                      {Math.round(analysisResult.lyric_match.confidence * 100)}%
-                    </Text>
-                  </View>
-                  <View style={styles.songRow}>
-                    {analysisResult.lyric_match.thumbnail ? (
-                      <Image source={{ uri: analysisResult.lyric_match.thumbnail }} style={styles.songCover} />
-                    ) : (
-                      <View style={styles.coverFallback}><Radio size={22} color={THEME.colors.accent} /></View>
-                    )}
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.songTitle} numberOfLines={1}>{analysisResult.lyric_match.title}</Text>
-                      <Text style={styles.songArtist} numberOfLines={1}>{analysisResult.lyric_match.artist}</Text>
-                    </View>
-                    {analysisResult.lyric_match.youtube_url && (
-                      <Pressable
-                        style={styles.mashupPlayBtn}
-                        onPress={() => Linking.openURL(analysisResult.lyric_match.youtube_url)}
-                      >
-                        <ExternalLink size={14} color="#FFF" />
-                      </Pressable>
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {/* Card 2: Matched Melody & Beat */}
-              {analysisResult.melody_match && (
-                <View style={[styles.mashupCard, { borderColor: 'rgba(168, 85, 247, 0.4)' }]}>
-                  <View style={styles.mashupCardHeader}>
-                    <Text style={[styles.mashupBadgeText, { color: THEME.colors.accent }]}>🎶 MATCHED YOUR MELODY & BEAT</Text>
-                    <Text style={styles.mashupConfText}>
-                      {Math.round(analysisResult.melody_match.confidence * 100)}%
-                    </Text>
-                  </View>
-                  <View style={styles.songRow}>
-                    {analysisResult.melody_match.thumbnail ? (
-                      <Image source={{ uri: analysisResult.melody_match.thumbnail }} style={styles.songCover} />
-                    ) : (
-                      <View style={styles.coverFallback}><Radio size={22} color={THEME.colors.accent} /></View>
-                    )}
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.songTitle} numberOfLines={1}>{analysisResult.melody_match.title}</Text>
-                      <Text style={styles.songArtist} numberOfLines={1}>{analysisResult.melody_match.artist}</Text>
-                    </View>
-                    {analysisResult.melody_match.youtube_url && (
-                      <Pressable
-                        style={styles.mashupPlayBtn}
-                        onPress={() => Linking.openURL(analysisResult.melody_match.youtube_url)}
-                      >
-                        <ExternalLink size={14} color="#FFF" />
-                      </Pressable>
-                    )}
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : (
-            /* STANDARD SINGLE SONG CARD */
-            <>
-              <View style={styles.songRow}>
-                {analysisResult.thumbnail ? (
-                  <Image source={{ uri: analysisResult.thumbnail }} style={styles.songCover} />
-                ) : (
-                  <View style={styles.coverFallback}>
-                    <Radio size={24} color={THEME.colors.accent} />
-                  </View>
-                )}
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={styles.songTitle} numberOfLines={1}>
-                    {analysisResult.title || 'Recognized Song'}
-                  </Text>
-                  <Text style={styles.songArtist} numberOfLines={1}>
-                    {analysisResult.artist || 'Featured Artist'}
-                  </Text>
-
-                  {/* Musical Signal DSP Info */}
-                  <View style={styles.dspRow}>
-                    {analysisResult.tempo_bpm > 0 && (
-                      <View style={styles.dspPill}>
-                        <Text style={styles.dspPillText}>{analysisResult.tempo_bpm} BPM</Text>
-                      </View>
-                    )}
-                    {analysisResult.timbre_type && (
-                      <View style={styles.dspPill}>
-                        <Text style={styles.dspPillText}>{analysisResult.timbre_type}</Text>
-                      </View>
-                    )}
-                    {analysisResult.dominant_keys && analysisResult.dominant_keys.length > 0 && (
-                      <View style={styles.dspPill}>
-                        <Text style={styles.dspPillText}>Key: {analysisResult.dominant_keys.slice(0, 2).join(', ')}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-
-              {/* Transcribed Lyrics / Vocal Hook */}
-              {analysisResult.detected_lyrics && (
-                <View style={styles.lyricsBox}>
-                  <Text style={styles.lyricsLabel}>TRANSCRIBED VOCALS / HOOK</Text>
-                  <Text style={styles.lyricsText}>"{analysisResult.detected_lyrics}"</Text>
-                </View>
-              )}
-
-              {/* Harmonic Vibe Reasoning */}
-              {analysisResult.explanation && (
-                <Text style={styles.vibeDescription}>
-                  {analysisResult.explanation}
-                </Text>
-              )}
-            </>
           )}
 
-          {/* Action Buttons */}
-          <View style={styles.actionBtnRow}>
-            {/* Add to Curated Deck */}
-            {analysisResult.card && (
-              <Pressable
-                style={styles.addDeckBtn}
-                onPress={() => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  addCardToDeck(analysisResult.card);
-                }}
-              >
-                <Plus size={16} color="#FFFFFF" />
-                <Text style={styles.addDeckBtnText}>Add to Curated Deck</Text>
-              </Pressable>
-            )}
+          {/* Tip Glass Panel matching profile/App.jsx */}
+          <View style={styles.tipCard}>
+            <View style={styles.tipIconBadge}>
+              <Sparkles size={18} color="#d7ff64" />
+            </View>
+            <View style={styles.tipMeta}>
+              <Text style={styles.tipTitle}>Better humming matches</Text>
+              <Text style={styles.tipDescription}>
+                Hum for at least 4-6 seconds in a quiet space for optimal pitch tracking.
+              </Text>
+            </View>
+            <ChevronRight size={16} color="rgba(255, 255, 255, 0.25)" />
+          </View>
+        </ScrollView>
+      )}
 
-            {/* Open in YouTube */}
-            {analysisResult.youtube_url && (
-              <Pressable
-                style={styles.youtubeLinkBtn}
-                onPress={() => Linking.openURL(analysisResult.youtube_url)}
-              >
-                <ExternalLink size={14} color="#FFF" />
-              </Pressable>
-            )}
+      {/* TAB CONTENT: YOUR HISTORY (Past 30 Days) */}
+      {activeTab === 'history' && (
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={styles.historyScrollInner}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.historyHeaderRow}>
+            <Text style={styles.historyTitle}>Searches (Past 30 days)</Text>
+            <Text style={styles.historyCountText}>{historyItems.length} found</Text>
           </View>
 
-          {/* Candidate Matches (Humming / Disambiguation) */}
-          {analysisResult.candidates && analysisResult.candidates.length > 0 && (
-            <View style={styles.candidatesSection}>
-              <Text style={styles.candidatesTitle}>
-                {analysisResult.status === 'candidates' ? 'TOP CANDIDATE MATCHES (TAP TO PREVIEW)' : 'ALTERNATIVE MELODIC MATCHES'}
+          {isLoadingHistory ? (
+            <View style={styles.loadingHistoryView}>
+              <ActivityIndicator size="small" color="#d7ff64" />
+              <Text style={styles.loadingHistoryText}>Loading search timeline…</Text>
+            </View>
+          ) : historyItems.length === 0 ? (
+            <View style={styles.emptyHistoryCard}>
+              <Clock size={32} color="rgba(255, 255, 255, 0.35)" style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyHistoryTitle}>No searches in past 30 days</Text>
+              <Text style={styles.emptyHistorySubtitle}>
+                Any songs you identify with Soundport Lens will be safely kept in your 30-day timeline.
               </Text>
-              {analysisResult.candidates.map((cand, idx) => (
-                <Pressable
-                  key={idx}
-                  style={styles.candidateRow}
-                  onPress={() => {
-                    if (cand.youtube_url) {
-                      Linking.openURL(cand.youtube_url);
-                    }
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.candTitle} numberOfLines={1}>{cand.title}</Text>
-                    <Text style={styles.candArtist} numberOfLines={1}>{cand.artist}</Text>
-                    <Text style={styles.candReason}>{cand.reason}</Text>
-                  </View>
-                  {cand.youtube_url && (
-                    <View style={styles.candLinkBtn}>
-                      <ExternalLink size={14} color={THEME.colors.accent} />
+              <Pressable
+                onPress={() => setActiveTab('listen')}
+                style={styles.listenNowButton}
+              >
+                <Text style={styles.listenNowButtonText}>Listen to a song now</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.historyList}>
+              {historyItems.map((item) => (
+                <View key={item.id} style={styles.historyRow}>
+                  <Image
+                    source={{ uri: item.thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600' }}
+                    style={styles.historyThumbnail}
+                  />
+                  <View style={styles.historyMeta}>
+                    <Text style={styles.historySongTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.historySongArtist} numberOfLines={1}>
+                      {item.artist}
+                    </Text>
+                    <View style={styles.historyBadgeRow}>
+                      <View style={styles.confidenceBadge}>
+                        <Text style={styles.confidenceText}>
+                          {Math.round((item.confidence || 0.95) * 100)}% match
+                        </Text>
+                      </View>
+                      <Text style={styles.historyTimestamp}>
+                        {item.created_at ? item.created_at.split(' ')[0] : 'Recent'}
+                      </Text>
                     </View>
-                  )}
-                </Pressable>
+                  </View>
+
+                  <View style={styles.historyActions}>
+                    {item.youtube_url ? (
+                      <Pressable
+                        onPress={() => Linking.openURL(item.youtube_url)}
+                        style={styles.historyActionBtn}
+                      >
+                        <ExternalLink size={16} color="#FFFFFF" />
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      onPress={() => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        addTrackToCustomDeck(0, {
+                          id: item.id,
+                          title: item.title,
+                          artist: item.artist,
+                          cover_url: item.thumbnail,
+                          preview_url: item.preview_url || item.youtube_url || ''
+                        });
+                      }}
+                      style={[styles.historyActionBtn, styles.historyAddDeckBtn]}
+                    >
+                      <Layers size={15} color="#000000" strokeWidth={2.4} />
+                    </Pressable>
+                  </View>
+                </View>
               ))}
             </View>
           )}
-        </View>
+        </ScrollView>
       )}
-    </ScrollView>
+
+      {/* Match Found Result Modal Sheet matching profile/App.jsx lines 650-690 */}
+      <Modal
+        visible={!!analysisResult}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAnalysisResult(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setAnalysisResult(null)}
+          />
+
+          <View style={[styles.resultSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+            <Image
+              source={{ uri: matchCover }}
+              style={styles.resultCoverImage}
+            />
+
+            <View style={styles.resultDetailsSection}>
+              {/* Match Found Tag */}
+              <View style={styles.matchFoundTag}>
+                <Check size={14} color="#d7ff64" strokeWidth={3} />
+                <Text style={styles.matchFoundText}>MATCH FOUND · {matchConfidence}% ACCURACY</Text>
+              </View>
+
+              <View style={styles.resultTitleRow}>
+                <View style={styles.resultTitleCol}>
+                  <Text style={styles.resultSongTitle} numberOfLines={1}>
+                    {matchTitle}
+                  </Text>
+                  <Text style={styles.resultSongArtist} numberOfLines={1}>
+                    {matchArtist}
+                  </Text>
+                </View>
+
+                {matchedTrack?.preview_url ? (
+                  <Pressable
+                    onPress={() => toggleAudioPreview(matchedTrack)}
+                    style={styles.resultPlayButton}
+                  >
+                    {isPlayingMatched ? (
+                      <Pause size={18} color="#000000" />
+                    ) : (
+                      <Play size={18} color="#000000" fill="#000000" />
+                    )}
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.resultActionsCol}>
+                <Pressable
+                  onPress={handleAddMatchedToCustomDeck}
+                  style={styles.addToDeckCtaButton}
+                >
+                  <Layers size={16} color="#000000" strokeWidth={2.4} />
+                  <Text style={styles.addToDeckCtaText}>Save to my custom deck</Text>
+                </Pressable>
+
+                {matchedTrack?.youtube_url ? (
+                  <Pressable
+                    onPress={() => Linking.openURL(matchedTrack.youtube_url)}
+                    style={styles.openExternalButton}
+                  >
+                    <ExternalLink size={15} color="#FFFFFF" />
+                    <Text style={styles.openExternalText}>Open in YouTube Music</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent'
-  },
-  content: {
-    paddingHorizontal: 22,
-    alignItems: 'center'
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 28
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary
-  },
-  subtitle: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-    maxWidth: 290
-  },
-  radarContainer: {
-    width: 220,
-    height: 220,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative'
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 210,
-    height: 210,
-    borderRadius: 105,
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.25)',
-    backgroundColor: 'rgba(168, 85, 247, 0.05)'
-  },
-  pulseRingInner: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.4)'
-  },
-  centerOrb: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: THEME.colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#A855F7',
-    shadowOpacity: 0.5,
-    shadowRadius: 16
-  },
-  centerOrbRecording: {
-    backgroundColor: '#EF4444',
-    shadowColor: '#EF4444'
-  },
-  centerOrbAnalyzing: {
-    backgroundColor: '#7C3AED'
-  },
-  statusBox: {
-    marginTop: 20,
-    backgroundColor: THEME.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: THEME.radius.full,
-    borderWidth: 1,
-    borderColor: THEME.colors.borderSubtle
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  recordingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#EF4444'
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: THEME.colors.textSecondary
-  },
-  errorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 16,
-    width: '100%',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: THEME.radius.md,
-    padding: 14
-  },
-  errorText: {
-    flex: 1,
-    color: '#FCA5A5',
-    fontSize: 12,
-    lineHeight: 16
-  },
-  resultCard: {
-    marginTop: 22,
-    width: '100%',
-    backgroundColor: THEME.colors.surface,
-    borderRadius: THEME.radius.lg,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: THEME.colors.borderActive
-  },
-  resultHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    paddingHorizontal: 4,
+    paddingTop: 4,
     marginBottom: 14
   },
-  resultHeaderTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary,
-    flex: 1
-  },
-  confidenceBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: THEME.radius.sm
-  },
-  confidenceText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#22C55E'
-  },
-  songRow: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  songCover: {
-    width: 60,
-    height: 60,
-    borderRadius: THEME.radius.md
-  },
-  coverFallback: {
-    width: 60,
-    height: 60,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.surfaceElevated,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  songTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: THEME.colors.textPrimary
-  },
-  songArtist: {
-    fontSize: 13,
-    color: THEME.colors.textSecondary,
-    fontWeight: '600',
-    marginTop: 2
-  },
-  dspRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6
-  },
-  dspPill: {
-    backgroundColor: THEME.colors.surfaceElevated,
-    paddingHorizontal: 7,
-    paddingVertical: 2.5,
-    borderRadius: 4
-  },
-  dspPillText: {
-    fontSize: 10,
-    color: THEME.colors.textMuted,
-    fontWeight: '700',
-    textTransform: 'uppercase'
-  },
-  lyricsBox: {
-    marginTop: 14,
-    backgroundColor: THEME.colors.surfaceElevated,
-    padding: 12,
-    borderRadius: THEME.radius.md,
-    borderWidth: 1,
-    borderColor: THEME.colors.borderSubtle
-  },
-  lyricsLabel: {
+  eyebrow: {
     fontSize: 10,
     fontWeight: '800',
-    color: THEME.colors.textMuted,
-    letterSpacing: 0.8
+    color: '#d7ff64',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+    marginBottom: 4
   },
-  lyricsText: {
-    fontSize: 13,
-    color: '#E9D5FF',
-    fontStyle: 'italic',
-    marginTop: 4
-  },
-  vibeDescription: {
-    fontSize: 12,
-    color: THEME.colors.textSecondary,
-    marginTop: 10,
-    lineHeight: 16
-  },
-  actionBtnRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 16
-  },
-  addDeckBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: THEME.colors.accent,
-    paddingVertical: 12,
-    borderRadius: THEME.radius.md
-  },
-  addDeckBtnText: {
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#FFFFFF',
-    fontSize: 13,
+    letterSpacing: -0.6
+  },
+  pillSwitcherWrapper: {
+    flexDirection: 'row',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    padding: 3,
+    marginBottom: 16
+  },
+  pillTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 9999,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pillTabActive: {
+    backgroundColor: '#FFFFFF'
+  },
+  pillTabInactive: {
+    backgroundColor: 'transparent'
+  },
+  pillTabText: {
+    fontSize: 12.5,
     fontWeight: '700'
   },
-  youtubeLinkBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: THEME.radius.md,
-    backgroundColor: '#EF4444',
+  pillTabTextActive: {
+    color: '#000000'
+  },
+  pillTabTextInactive: {
+    color: 'rgba(255, 255, 255, 0.45)'
+  },
+  scrollContent: {
+    flex: 1
+  },
+  scrollInner: {
+    alignItems: 'center',
+    paddingBottom: 24
+  },
+  radarArena: {
+    width: '100%',
+    height: 280,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginVertical: 10
+  },
+  ambientPurpleGlow: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(139, 92, 246, 0.12)'
+  },
+  lensOrbit: {
+    position: 'absolute',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)'
+  },
+  orbitOuter: {
+    width: 250,
+    height: 250
+  },
+  orbitInner: {
+    width: 200,
+    height: 200
+  },
+  listenCore: {
+    width: 154,
+    height: 154,
+    borderRadius: 77,
+    backgroundColor: '#d7ff64',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#d7ff64',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
+    zIndex: 10
+  },
+  listenCoreActive: {
+    backgroundColor: '#ff817a',
+    shadowColor: '#ff817a'
+  },
+  idleCenter: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  tapToListenText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000000',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    marginTop: 8
+  },
+  listeningCenter: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  listeningText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#000000',
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+    marginTop: 4
+  },
+  recordTimerText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#000000',
+    marginTop: 2
+  },
+  analyzingCenter: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  analyzingText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#000000',
+    marginTop: 8
+  },
+  listeningBarsRow: {
+    position: 'absolute',
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4
+  },
+  listeningBar: {
+    width: 4,
+    borderRadius: 2,
+    backgroundColor: '#d7ff64'
+  },
+  statusSection: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 20
+  },
+  statusTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+    textAlign: 'center'
+  },
+  statusSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 6,
+    maxWidth: 290
+  },
+  errorBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16
+  },
+  errorText: {
+    color: '#ff817a',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center'
+  },
+  tipCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    padding: 14
+  },
+  tipIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(215, 255, 100, 0.1)',
     justifyContent: 'center',
     alignItems: 'center'
   },
-  candidatesSection: {
-    marginTop: 16,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: THEME.colors.borderSubtle
+  tipMeta: {
+    flex: 1
   },
-  candidatesTitle: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: THEME.colors.textMuted,
-    letterSpacing: 0.8,
-    marginBottom: 8
+  tipTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF'
   },
-  candidateRow: {
-    backgroundColor: THEME.colors.surfaceElevated,
-    padding: 12,
-    borderRadius: THEME.radius.sm,
-    marginBottom: 8,
+  tipDescription: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.4)',
+    marginTop: 2,
+    lineHeight: 15
+  },
+  historyScrollInner: {
+    paddingBottom: 24
+  },
+  historyHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 4
+  },
+  historyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  historyCountText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#d7ff64'
+  },
+  loadingHistoryView: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 32
+  },
+  loadingHistoryText: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.6)'
+  },
+  emptyHistoryCard: {
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: THEME.colors.borderSubtle
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginTop: 20
   },
-  candLinkBtn: {
-    padding: 6,
-    marginLeft: 8
-  },
-  candTitle: {
-    fontSize: 12.5,
+  emptyHistoryTitle: {
+    fontSize: 16,
     fontWeight: '700',
-    color: THEME.colors.textPrimary
+    color: '#FFFFFF',
+    marginBottom: 6
   },
-  candArtist: {
-    fontSize: 11,
-    color: THEME.colors.textSecondary
+  emptyHistorySubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.45)',
+    textAlign: 'center',
+    lineHeight: 17,
+    marginBottom: 20
   },
-  candReason: {
-    fontSize: 10.5,
-    color: THEME.colors.textMuted,
+  listenNowButton: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 9999
+  },
+  listenNowButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000000'
+  },
+  historyList: {
+    gap: 10
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 10
+  },
+  historyThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)'
+  },
+  historyMeta: {
+    flex: 1
+  },
+  historySongTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  historySongArtist: {
+    fontSize: 11.5,
+    color: 'rgba(255, 255, 255, 0.55)',
     marginTop: 2
   },
-  mashupContainer: {
-    width: '100%',
-    marginTop: 8
-  },
-  mashupNotice: {
+  historyBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(236, 72, 153, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(236, 72, 153, 0.35)',
-    padding: 10,
-    borderRadius: THEME.radius.md,
-    marginBottom: 12,
+    gap: 8,
+    marginTop: 5
+  },
+  confidenceBadge: {
+    backgroundColor: 'rgba(215, 255, 100, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6
+  },
+  confidenceText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#d7ff64'
+  },
+  historyTimestamp: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.35)'
+  },
+  historyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8
   },
-  mashupNoticeText: {
-    fontSize: 12,
-    color: '#F472B6',
-    fontWeight: '700',
+  historyActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  historyAddDeckBtn: {
+    backgroundColor: '#d7ff64'
+  },
+  modalBackdrop: {
     flex: 1,
-    lineHeight: 16
-  },
-  mashupCard: {
-    backgroundColor: THEME.colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: 'rgba(236, 72, 153, 0.3)',
-    borderRadius: THEME.radius.md,
-    padding: 12,
-    marginBottom: 10
-  },
-  mashupCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'flex-end',
     alignItems: 'center',
+    paddingHorizontal: 12
+  },
+  resultSheet: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#161514',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20
+  },
+  resultCoverImage: {
+    width: '100%',
+    height: 220,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)'
+  },
+  resultDetailsSection: {
+    padding: 18
+  },
+  matchFoundTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 8
   },
-  mashupBadgeText: {
+  matchFoundText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#F472B6',
-    letterSpacing: 0.8
+    color: '#d7ff64',
+    letterSpacing: 1.6
   },
-  mashupConfText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#A855F7'
-  },
-  mashupPlayBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
+  resultTitleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8
+    justifyContent: 'space-between',
+    marginBottom: 18
+  },
+  resultTitleCol: {
+    flex: 1,
+    marginRight: 10
+  },
+  resultSongTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.4
+  },
+  resultSongArtist: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 2
+  },
+  resultPlayButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#d7ff64',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  resultActionsCol: {
+    gap: 10
+  },
+  addToDeckCtaButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 13,
+    borderRadius: 9999
+  },
+  addToDeckCtaText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#000000'
+  },
+  openExternalButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 12,
+    borderRadius: 9999
+  },
+  openExternalText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF'
   }
 });

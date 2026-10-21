@@ -87,6 +87,22 @@ class EventLogger:
             CREATE INDEX IF NOT EXISTS idx_impressions_req ON impressions(request_id);
             CREATE INDEX IF NOT EXISTS idx_events_imp ON events(impression_id);
             CREATE INDEX IF NOT EXISTS idx_events_user_type ON events(user_id, type);
+
+            CREATE TABLE IF NOT EXISTS lens_search_history (
+                id                  TEXT PRIMARY KEY,
+                user_id             TEXT NOT NULL,
+                title               TEXT NOT NULL,
+                artist              TEXT NOT NULL,
+                album               TEXT,
+                thumbnail           TEXT,
+                youtube_url         TEXT,
+                spotify_url         TEXT,
+                preview_url         TEXT,
+                confidence          REAL DEFAULT 0.95,
+                mode                TEXT DEFAULT 'AUDIO',
+                created_at          TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_lens_history_user ON lens_search_history(user_id, created_at);
             """)
 
     def _sync_log_request_and_impressions(self, req: Dict[str, Any], impressions: List[Dict[str, Any]]):
@@ -210,3 +226,83 @@ class EventLogger:
         except Exception as e:
             logger.error(f"EventLogger: Failed to delete data for user {user_id}: {e}")
             return 0
+
+    def log_lens_search(
+        self,
+        user_id: str,
+        title: str,
+        artist: str,
+        album: str = "",
+        thumbnail: str = "",
+        youtube_url: str = "",
+        spotify_url: str = "",
+        preview_url: str = "",
+        confidence: float = 0.95,
+        mode: str = "AUDIO"
+    ) -> str:
+        """Persists an audio search identification to 30-day search history."""
+        search_id = f"lens_{uuid.uuid4().hex[:12]}"
+        clean_uid = user_id.strip() if user_id and user_id.strip() else "demo_guest_user"
+        try:
+            with self._get_connection() as conn:
+                conn.execute("""
+                INSERT INTO lens_search_history (
+                    id, user_id, title, artist, album, thumbnail,
+                    youtube_url, spotify_url, preview_url, confidence, mode, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                """, (
+                    search_id,
+                    clean_uid,
+                    title or "Unknown Track",
+                    artist or "Unknown Artist",
+                    album or "",
+                    thumbnail or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600",
+                    youtube_url or "",
+                    spotify_url or "",
+                    preview_url or youtube_url or "",
+                    float(confidence),
+                    mode or "AUDIO"
+                ))
+            logger.info(f"EventLogger: Logged lens search '{title}' by '{artist}' for user {clean_uid}")
+            return search_id
+        except Exception as e:
+            logger.error(f"EventLogger: Failed to log lens search: {e}")
+            return search_id
+
+    def get_lens_history(
+        self,
+        user_id: Optional[str] = None,
+        days: int = 30,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """Retrieves lens search history for the user within the last N days (defaults to 30 days)."""
+        clean_uid = user_id.strip() if user_id and user_id.strip() else "demo_guest_user"
+        try:
+            with self._get_connection() as conn:
+                # Retrieve searches from past 30 days. Fall back to guest searches if user has no specific entries.
+                query = f"""
+                SELECT id, user_id, title, artist, album, thumbnail,
+                       youtube_url, spotify_url, preview_url, confidence, mode, created_at
+                FROM lens_search_history
+                WHERE (user_id = ? OR user_id = 'demo_guest_user' OR ? = 'demo_guest_user')
+                  AND created_at >= datetime('now', '-{int(days)} days')
+                ORDER BY created_at DESC
+                LIMIT ?
+                """
+                rows = conn.execute(query, (clean_uid, clean_uid, int(limit))).fetchall()
+                history = [dict(r) for r in rows]
+                return history
+        except Exception as e:
+            logger.error(f"EventLogger: Failed to fetch lens history: {e}")
+            return []
+
+    def clear_lens_history(self, user_id: str) -> int:
+        clean_uid = user_id.strip() if user_id and user_id.strip() else "demo_guest_user"
+        try:
+            with self._get_connection() as conn:
+                cur = conn.execute("DELETE FROM lens_search_history WHERE user_id = ?", (clean_uid,))
+                return cur.rowcount
+        except Exception as e:
+            logger.error(f"EventLogger: Failed to clear lens history: {e}")
+            return 0
+

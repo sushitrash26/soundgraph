@@ -17,6 +17,7 @@ import {
   Zap,
   Activity,
   Heart,
+  Layers,
   X as XIcon
 } from 'lucide-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -43,6 +44,7 @@ export default function ThreeDDeckCard({
   onTogglePlay,
   onSwipeLeft,
   onSwipeRight,
+  onAddToDeck,
   dragProgress // SharedValue from parent if coordinating multiple cards
 }) {
   const isTop = index === 0;
@@ -328,12 +330,27 @@ export default function ThreeDDeckCard({
                 </View>
               </View>
 
-              {/* Recommendation Reason Pill */}
-              <View style={styles.reasonBadge}>
-                <Sparkles size={12} color="rgba(255, 255, 255, 0.9)" style={{ marginRight: 6 }} />
-                <Text style={styles.reasonText} numberOfLines={1}>
-                  {card.reason || card.quadrant || 'Curated For Your Sonic Baseline'}
-                </Text>
+              {/* Recommendation Reason Pill & Add to Deck */}
+              <View style={styles.cardActionsRow}>
+                <View style={styles.reasonBadge}>
+                  <Sparkles size={12} color="rgba(255, 255, 255, 0.9)" style={{ marginRight: 6 }} />
+                  <Text style={styles.reasonText} numberOfLines={1}>
+                    {card.reason || card.quadrant || 'Curated For Your Sonic Baseline'}
+                  </Text>
+                </View>
+
+                {onAddToDeck && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      onAddToDeck(card);
+                    }}
+                    style={styles.addToDeckButton}
+                  >
+                    <Layers size={13} color="#000000" strokeWidth={2.4} />
+                    <Text style={styles.addToDeckButtonText}>Add to deck</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           ) : (
@@ -489,7 +506,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.72)'
   },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   reasonBadge: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.10)',
@@ -504,6 +527,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     flex: 1
+  },
+  addToDeckButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4
+  },
+  addToDeckButtonText: {
+    color: '#000000',
+    fontSize: 11.5,
+    fontWeight: '700'
   },
   stackedBottomSpacer: {
     height: 48
