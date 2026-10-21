@@ -89,8 +89,19 @@ class PersistentSessionStore:
 
 SESSION_STORE = PersistentSessionStore()
 
+def _resolve_redirect_uri(request: Request, provider: str) -> str:
+    configured = getattr(settings, f"{provider.upper()}_REDIRECT_URI", "")
+    # Check if request was forwarded via HTTPS reverse proxy (e.g. Cloud Run)
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if host and not ("127.0.0.1" in host or "localhost" in host):
+        return f"{proto}://{host}/auth/{provider}/callback"
+    if configured and not ("127.0.0.1" in configured or "localhost" in configured):
+        return configured
+    return configured or f"http://127.0.0.1:{settings.API_PORT}/auth/{provider}/callback"
+
 @router.get("/spotify/login")
-def spotify_login(redirect: bool = True, return_to: str = Query(None)):
+def spotify_login(request: Request, redirect: bool = True, return_to: str = Query(None)):
     if not settings.SPOTIFY_CLIENT_ID or not settings.SPOTIFY_CLIENT_SECRET:
         if redirect:
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/?error=spotify_credentials_missing")
@@ -99,11 +110,13 @@ def spotify_login(redirect: bool = True, return_to: str = Query(None)):
             "message": "Spotify API credentials not yet configured. Enter them in the settings modal.",
             "login_url": None
         }
-    sp_oauth = SpotifyIngestor.get_oauth_manager()
+    redirect_uri = _resolve_redirect_uri(request, "spotify")
+    sp_oauth = SpotifyIngestor.get_oauth_manager(redirect_uri=redirect_uri)
     auth_url = sp_oauth.get_authorize_url(state=return_to if return_to else "web")
     if redirect:
         return RedirectResponse(url=auth_url)
     return {"status": "ready", "login_url": auth_url}
+
 
 @router.post("/spotify/credentials")
 async def set_spotify_credentials(request: Request):
@@ -139,9 +152,10 @@ async def set_spotify_credentials(request: Request):
     return {"status": "success", "login_url": auth_url}
 
 @router.get("/spotify/callback")
-def spotify_callback(code: str = Query(...), state: str = Query(None)):
+def spotify_callback(request: Request, code: str = Query(...), state: str = Query(None)):
     try:
-        sp_oauth = SpotifyIngestor.get_oauth_manager()
+        redirect_uri = _resolve_redirect_uri(request, "spotify")
+        sp_oauth = SpotifyIngestor.get_oauth_manager(redirect_uri=redirect_uri)
         token_info = sp_oauth.get_access_token(code)
         access_token = token_info["access_token"]
         refresh_token = token_info.get("refresh_token")
@@ -179,7 +193,7 @@ def spotify_callback(code: str = Query(...), state: str = Query(None)):
 # --- Google / YouTube OAuth Endpoints ---
 
 @router.get("/google/login")
-def google_login(redirect: bool = True, return_to: str = Query(None)):
+def google_login(request: Request, redirect: bool = True, return_to: str = Query(None)):
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         if redirect:
             return RedirectResponse(url=f"{settings.FRONTEND_URL}/?error=google_credentials_missing")
@@ -188,7 +202,8 @@ def google_login(redirect: bool = True, return_to: str = Query(None)):
             "message": "Google Client ID & Secret not configured in .env yet.",
             "login_url": None
         }
-    auth_url = GoogleYouTubeIngestor.get_auth_url(state=return_to if return_to else "web")
+    redirect_uri = _resolve_redirect_uri(request, "google")
+    auth_url = GoogleYouTubeIngestor.get_auth_url(redirect_uri=redirect_uri, state=return_to if return_to else "web")
     if redirect:
         return RedirectResponse(url=auth_url)
     return {"status": "ready", "login_url": auth_url}
@@ -220,9 +235,10 @@ async def set_google_credentials(request: Request):
     return {"status": "success", "login_url": auth_url}
 
 @router.get("/google/callback")
-async def google_callback(code: str = Query(...), state: str = Query(None)):
+async def google_callback(request: Request, code: str = Query(...), state: str = Query(None)):
     try:
-        tokens = await GoogleYouTubeIngestor.exchange_code_for_token(code)
+        redirect_uri = _resolve_redirect_uri(request, "google")
+        tokens = await GoogleYouTubeIngestor.exchange_code_for_token(code, redirect_uri=redirect_uri)
         access_token = tokens["access_token"]
         refresh_token = tokens.get("refresh_token")
         SESSION_STORE["google_token"] = access_token

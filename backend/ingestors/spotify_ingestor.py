@@ -26,14 +26,15 @@ class SpotifyIngestor(BaseIngestor):
             self.sp = spotipy.Spotify(auth=auth_token)
 
     @classmethod
-    def get_oauth_manager(cls) -> SpotifyOAuth:
+    def get_oauth_manager(cls, redirect_uri: Optional[str] = None) -> SpotifyOAuth:
         return SpotifyOAuth(
             client_id=settings.SPOTIFY_CLIENT_ID,
             client_secret=settings.SPOTIFY_CLIENT_SECRET,
-            redirect_uri=settings.SPOTIFY_REDIRECT_URI,
+            redirect_uri=redirect_uri or settings.SPOTIFY_REDIRECT_URI,
             scope=" ".join(SPOTIFY_SCOPES),
             cache_path=".spotify_cache"
         )
+
 
     def fetch_user_profile(self) -> Dict[str, Any]:
         if not self.sp:
