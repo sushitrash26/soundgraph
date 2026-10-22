@@ -1,0 +1,149 @@
+%-------------------------
+% Resume in LaTeX - Strict 1-Page Format
+% Author : Astitva Pathak
+%------------------------
+
+\documentclass[10pt,letterpaper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[margin=0.32in, top=0.25in, bottom=0.25in]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+\usepackage{tabularx}
+
+\linespread{0.94}
+\pagestyle{empty}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Section Titles Formatting
+\titleformat{\section}{\scshape\raggedright\large}{}{0em}{}[\titlerule]
+\titlespacing*{\section}{0pt}{2.0pt}{1.0pt}
+
+
+% Bullet list styling (exact en-dash symbol and tight padding)
+\setlist[itemize]{
+  label={--},
+  leftmargin=1.2em,
+  itemsep=0.2pt,
+  topsep=0.2pt,
+  parsep=0pt,
+  partopsep=0pt
+}
+
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    {\LARGE \textbf{Astitva Pathak}} \\[2.5pt]
+    \small
+    +91-9131528808 \ \textbar\ 
+    \href{mailto:dev.astitva.pathak@gmail.com}{dev.astitva.pathak@gmail.com} \ \textbar\ 
+    \href{https://linkedin.com/in/astitvapathak}{linkedin.com/in/astitvapathak} \ \textbar\ 
+    \href{https://github.com/sushitrash26}{github.com/sushitrash26}
+\end{center}
+\vspace{-4pt}
+
+%-----------EDUCATION-----------
+\section{Education}
+\vspace{1pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{Rajiv Gandhi Institute of Petroleum Tech.} & Jais, India \\
+  \textit{B.Tech in Information Technology -- 7.5/10 (Roll No: 22IT3011)} & 2022 -- 2026 \\
+  \textbf{Pragati Vidhya Peeth} & India \\
+  \textit{Intermediate -- 87.6\% \quad $|$ \quad Matriculation -- 90.8\%} & \\
+\end{tabular*}
+\vspace{-2pt}
+
+%-----------EXPERIENCE-----------
+\section{Experience}
+
+% Rayvector - Full-Time
+\vspace{2pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{Software Engineer I} & May 2026 -- Present \\
+  \textit{Rayvector Technologies (Full-Time)} & \textit{Bengaluru, India} \\
+\end{tabular*}
+\vspace{-2pt}
+\begin{itemize}
+  \item Engineered distributed real-time telemetry and edge hardware data pipelines, leveraging \textbf{PostgreSQL} time-series partitioning and indexing strategies to reduce analytical query latency by 35\%.
+  \item Architected low-latency \textbf{gRPC} and \textbf{RESTful} microservices in \textbf{Next.js} and \textbf{Node.js} to stream high-frequency sensor payloads across distributed edge platforms and mobile clients.
+  \item Implemented fault-tolerant sliding-window stream aggregation and state synchronization mechanisms, maintaining zero-data-loss execution under low-bandwidth network environments.
+\end{itemize}
+
+% Rayvector - Intern
+\vspace{2pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{Software Engineer Intern} & Jan 2026 -- Apr 2026 \\
+  \textit{Rayvector Technologies} & \textit{Bengaluru, India} \\
+\end{tabular*}
+\vspace{-2pt}
+\begin{itemize}
+  \item Built high-throughput \textbf{ELT} data ingestion pipelines for real-time edge telemetry tracking, structuring target database schemas to process millions of time-series records daily.
+  \item Optimized \textbf{PostgreSQL} query execution plans via \textbf{B-tree} and \textbf{BRIN} indexing, cutting execution latency by 40\% for continuous streaming data visualization.
+  \item Designed automated schema migration and data integrity validation services to ensure consistency across distributed node clusters.
+\end{itemize}
+
+% Raeth.ai
+\vspace{2pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{Full Stack Developer} & Jan 2026 \\
+  \textit{Raeth.ai (Part-Time)} & \textit{Remote} \\
+\end{tabular*}
+\vspace{-2pt}
+\begin{itemize}
+  \item Architected \textbf{Poker Arena}, a distributed multi-agent system utilizing \textbf{GraphRAG} with \textbf{Knowledge Graphs (Neo4j)} to map opponent game states, entity interactions, and hidden decision histories.
+  \item Engineered a high-performance \textbf{RAG} vector retrieval engine indexing agent turn history into dense vector embeddings (\textbf{pgvector}) to deliver sub-millisecond similarity search and context injection.
+  \item Constructed an \textbf{RLHF/RLAIF} continuous feedback pipeline that dynamically re-weights graph edge relationships based on agent turn rewards, minimizing hallucination and improving strategic decision accuracy.
+  \item Engineered low-latency \textbf{WebSocket} event buses to synchronize real-time state mutations across parallel LLM inference instances.
+\end{itemize}
+
+% Audivo
+\vspace{2pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{Full Stack \& AI Engineer} & Jun 2025 -- Jan 2026 \\
+  \textit{Audivo (Internship)} & \textit{Remote} \\
+\end{tabular*}
+\vspace{-2pt}
+\begin{itemize}
+  \item Developed scalable distributed media data pipelines utilizing \textbf{MongoDB} and \textbf{Next.js 14}, converting raw unstructured audio/video payloads into dense feature vectors for content indexing.
+  \item Engineered asynchronous background job queues using \textbf{Redis/RabbitMQ} to parallelize media processing tasks across worker nodes, supporting \textbf{1,000+ concurrent} user sessions.
+  \item Optimized backend retrieval layers and front-end rendering engines (\textbf{Three.js}, \textbf{Zustand}), achieving a 40\% reduction in bounce rates and significantly lowering client-side memory footprint.
+  \item Set up automated containerized CI/CD pipelines via Vercel and GitHub Actions, cutting release cycles from days to hours.
+\end{itemize}
+\vspace{-2pt}
+
+%-----------PROJECTS-----------
+\section{Projects}
+\vspace{2pt}
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{SoundGraph -- Music Intelligence \& Audio Discovery Engine} & \href{https://github.com/sushitrash26/soundgraph}{\underline{github.com/sushitrash26/soundgraph}} \\
+  \textit{Python (FastAPI), Neo4j, Docker, Google Cloud Run, Redis, Audio DSP, React Native} & \textit{Open Source} \\
+\end{tabular*}
+\vspace{-2pt}
+\begin{itemize}
+  \item Architected a heterogeneous music knowledge graph in \textbf{Neo4j} with 6D acoustic coordinate embeddings, authoring optimized multi-hop Cypher queries to achieve sub-50ms recommendation traversal latency.
+  \item Engineered the \textbf{HexaSonic} audio DSP fingerprinting engine utilizing \textbf{STFT} spectral constellation hashing and FAISS vector indexing, achieving sub-second audio recognition from live microphone streams.
+  \item Built a 60 FPS \textbf{React Native (Expo)} mobile app with \textbf{Reanimated} 3D deck gestures, haptic confirmation sliders, and compiled standalone native ARM64-v8a Android APKs.
+  \item Deployed containerized microservices on \textbf{Google Cloud Run} with \textbf{Upstash Redis} distributed caching, handling autoscaled audio analysis and zero-data-loss OAuth 2.0 sync across Spotify and YouTube Music.
+\end{itemize}
+
+\vspace{-2pt}
+
+%-----------TECHNICAL SKILLS & ACHIEVEMENTS-----------
+\section{Technical Skills \& Achievements}
+\vspace{2pt}
+\small{
+\textbf{Generative AI \& RAG:} GraphRAG, Knowledge Graphs (Neo4j, NetworkX), RAG Architecture, Vector DBs (pgvector, Qdrant, Pinecone), Dense/Sparse Hybrid Search, RLHF/RLAIF, Semantic Caching, Embeddings, Cross-Encoders \\[2.2pt]
+\textbf{Data Engineering \& Dist. Systems:} Distributed Systems, High-Throughput Gateways, ELT/ETL Pipelines, Time-Series Data, Schema Partitioning, Kafka, RabbitMQ, Redis Cluster, PostgreSQL, MongoDB, gRPC, REST \\[2.2pt]
+\textbf{Languages \& Data Science:} Python, C++, TypeScript, JavaScript, SQL, PyTorch, TensorFlow, OpenCV, Librosa, NumPy, Pandas, Scikit-Learn \\[2.2pt]
+\textbf{Cloud \& Infrastructure:} Docker, Kubernetes, Jenkins, Azure CI/CD, AWS, Microservices, WebSockets, WebRTC, Linux, Git \\[2.2pt]
+\textbf{Key Achievements:} Tech Lead, E-Cell RGIPT (Led tech projects for 1k+ students) \ \textbar\ \textbf{JEE Advanced 2022 (Top 2\% nationwide)} \ \textbar\ \textbf{Full Tuition Scholarship} (Academic excellence) \ \textbar\ \textbf{Mentorship} (Guided 200+ rural students)
+}
+
+\end{document}

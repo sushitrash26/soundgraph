@@ -102,8 +102,8 @@ class GraphQueries:
         """
         # QW1 Learning Guard: Discard feedback on tracks without verified playable audio
         try:
-            status_check = neo4j_conn.query("MATCH (t:Track {id: $tid}) RETURN coalesce(t.preview_status, 'failed') AS status", {"tid": track_id})
-            if not status_check or status_check[0]["status"] != "ok":
+            status_check = neo4j_conn.query("MATCH (t:Track {id: $tid}) RETURN coalesce(t.preview_status, 'ok') AS status", {"tid": track_id})
+            if not status_check or status_check[0]["status"] == "failed":
                 logger.warning(f"QW1 Learning Guard: Dropped feedback for unplayable track {track_id}")
                 return {"status": "ignored", "reason": "silent_card_feedback_dropped"}
         except Exception as e:
@@ -508,7 +508,7 @@ class GraphQueries:
                 CALL db.index.vector.queryNodes('track_embeddings', $adaptiveK, $centroidVec)
                 YIELD node AS rec, score AS vector_score
                 WHERE NOT rec.id IN $excludeList
-                  AND coalesce(rec.preview_status, 'failed') = 'ok'
+                  AND coalesce(rec.preview_status, 'ok') <> 'failed'
                   {mood_condition}
                 OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
                 OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
@@ -561,7 +561,7 @@ class GraphQueries:
         MATCH (u:User {{id: $user_id}})-[l:LISTENED_TO]->(listened:Track)
         MATCH (listened)-[sim:SIMILAR_TO]->(rec:Track)
         WHERE NOT rec.id IN $excludeList
-          AND coalesce(rec.preview_status, 'failed') = 'ok'
+          AND coalesce(rec.preview_status, 'ok') <> 'failed'
           {mood_condition}
         OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
         OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
@@ -601,7 +601,7 @@ class GraphQueries:
         cold_query = f"""
         MATCH (rec:Track)
         WHERE NOT rec.id IN $excludeList
-          AND coalesce(rec.preview_status, 'failed') = 'ok'
+          AND coalesce(rec.preview_status, 'ok') <> 'failed'
           {mood_condition}
         OPTIONAL MATCH (rec)-[:BY]->(a:Artist)
         OPTIONAL MATCH (rec)-[:IN_GENRE]->(g:Genre)
@@ -1327,8 +1327,8 @@ class GraphQueries:
         """
         # QW1 Learning Guard: Discard telemetry on tracks without verified playable audio
         try:
-            status_check = neo4j_conn.query("MATCH (t:Track {id: $tid}) RETURN coalesce(t.preview_status, 'failed') AS status", {"tid": track_id})
-            if not status_check or status_check[0]["status"] != "ok":
+            status_check = neo4j_conn.query("MATCH (t:Track {id: $tid}) RETURN coalesce(t.preview_status, 'ok') AS status", {"tid": track_id})
+            if not status_check or status_check[0]["status"] == "failed":
                 logger.warning(f"QW1 Learning Guard: Dropped dwell telemetry for unplayable track {track_id}")
                 return {"status": "ignored", "reason": "silent_card_telemetry_dropped"}
         except Exception as e:

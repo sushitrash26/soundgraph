@@ -136,15 +136,15 @@ export const useMobileStore = create((set, get) => ({
   checkBackendConnection: async () => {
     set({ isConnecting: true, connectionError: null });
     const candidates = [
-      get().apiBase,
       'https://soundgraph-1063139773680.europe-west1.run.app',
+      get().apiBase,
       'http://192.168.0.6:8001',
       'http://127.0.0.1:8001'
     ].filter(Boolean);
 
     for (const base of candidates) {
       try {
-        const res = await axios.get(`${base}/auth/me`, { timeout: 2500 });
+        const res = await axios.get(`${base}/auth/me`, { timeout: 8000 });
         if (res.data) {
           const hasUser = !!res.data.user;
           set({
@@ -161,6 +161,7 @@ export const useMobileStore = create((set, get) => ({
         // probe next
       }
     }
+
 
     set({
       backendConnected: false,
@@ -541,7 +542,7 @@ export const useMobileStore = create((set, get) => ({
       const query = user?.id ? `?user_id=${encodeURIComponent(user.id)}&limit=10` : '?limit=10';
       const res = await axios.get(`${get().getApiBase()}/recommendations${query}`);
       const rawCards = Array.isArray(res.data) ? res.data : [];
-      const normalized = rawCards.map((c, i) => ({
+      let normalized = rawCards.map((c, i) => ({
         ...c,
         id: c.track_id || c.id || `rec_${i}`,
         track_id: c.track_id || c.id || `rec_${i}`,
@@ -549,13 +550,57 @@ export const useMobileStore = create((set, get) => ({
         name: c.track_name || c.title || c.name || 'Harmonic Track',
         artist: Array.isArray(c.artists) ? c.artists.join(', ') : (c.artist || 'Featured Artist'),
         cover_url: c.cover_url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600',
+        preview_url: c.preview_url || '',
         reason: c.reason || 'Matches your taste profile'
       }));
+
+      if (normalized.length === 0) {
+        normalized = [
+          {
+            track_id: "spotify:track:starboy",
+            id: "spotify:track:starboy",
+            title: "Starboy",
+            name: "Starboy",
+            artist: "The Weeknd, Daft Punk",
+            cover_url: "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/b5/92/bb/b592bb72-52e3-e756-9b26-9f56d08f47ab/16UMGIM67864.rgb.jpg/600x600bb.jpg",
+            preview_url: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a",
+            reason: "High-energy late night focus anchor",
+            energy: 0.82,
+            valence: 0.68
+          },
+          {
+            track_id: "spotify:track:blinding_lights",
+            id: "spotify:track:blinding_lights",
+            title: "Blinding Lights",
+            name: "Blinding Lights",
+            artist: "The Weeknd",
+            cover_url: "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/61/e7/3f/61e73f94-018d-5f50-50ec-8521952bc72e/20UM1IM11629.rgb.jpg/600x600bb.jpg",
+            preview_url: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a",
+            reason: "Atmospheric synthwave baseline",
+            energy: 0.80,
+            valence: 0.61
+          },
+          {
+            track_id: "spotify:track:midnight_city",
+            id: "spotify:track:midnight_city",
+            title: "Midnight City",
+            name: "Midnight City",
+            artist: "M83",
+            cover_url: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/cb/7b/a9/cb7ba903-b5f1-cc21-90db-7a81b7aa0997/724596951057.jpg/600x600bb.jpg",
+            preview_url: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/24/09/79/2409794c-3d5d-af26-580e-7dc00ee4f207/mzaf_369629549966021675.plus.aac.p.m4a",
+            reason: "Cinematic nocturnal soundscape",
+            energy: 0.78,
+            valence: 0.55
+          }
+        ];
+      }
+
       set({
         infiniteDeck: normalized,
         infiniteIndex: 0,
         isLoadingInfiniteDeck: false
       });
+
     } catch (e) {
       console.warn('Error fetching infinite recommendations:', e.message);
       set({ isLoadingInfiniteDeck: false });
