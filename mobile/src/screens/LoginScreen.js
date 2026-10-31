@@ -624,6 +624,44 @@ export default function LoginScreen({ onClose }) {
                 )}
               </View>
             </Pressable>
+
+            {/* Quick Access Divider */}
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR EXPLORE</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Guest / Direct Explorer Mode */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.connectButton,
+                styles.guestButton,
+                pressed && styles.buttonPressed,
+                loadingPlatform === 'guest' && styles.buttonLoading
+              ]}
+              onPress={handleGuestEntry}
+              disabled={loadingPlatform !== null}
+            >
+              <View style={styles.guestMark}>
+                <Sparkles size={20} color="#D7FF64" />
+              </View>
+
+              <View style={styles.connectTextCol}>
+                <Text style={styles.connectTitle}>
+                  {loadingPlatform === 'guest' ? 'Entering...' : 'Continue as Guest'}
+                </Text>
+                <Text style={styles.connectSubtitle}>Instant entry • No account required</Text>
+              </View>
+
+              <View style={styles.connectArrowCircle}>
+                {loadingPlatform === 'guest' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <ChevronRight size={17} color="rgba(255, 255, 255, 0.7)" />
+                )}
+              </View>
+            </Pressable>
           </BlurView>
         )}
 
@@ -1001,6 +1039,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 6
+  },
+  guestMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(215, 255, 100, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(215, 255, 100, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#D7FF64',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4
+  },
+  guestButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   connectTextCol: {
     flex: 1

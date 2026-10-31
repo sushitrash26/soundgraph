@@ -16,6 +16,7 @@ from backend.api.routes.deck import router as deck_router
 from backend.api.routes.migration import router as migration_router
 from backend.api.routes.onboarding import router as onboarding_router
 from backend.api.routes.profile import router as profile_router
+from backend.api.routes.audio_forge import router as audio_forge_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +57,7 @@ app.include_router(deck_router)
 app.include_router(migration_router)
 app.include_router(onboarding_router)
 app.include_router(profile_router)
+app.include_router(audio_forge_router)
 
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket):

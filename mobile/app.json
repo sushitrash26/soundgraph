@@ -2,6 +2,7 @@
   "expo": {
     "name": "SoundGraph",
     "slug": "soundgraph",
+    "scheme": "soundgraph",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +22,9 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "androidStatusBar": {
         "barStyle": "light-content",
@@ -40,6 +43,11 @@
     "plugins": [
       "expo-web-browser",
       "expo-audio"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "166444bf-3415-4f5b-8abd-d168e8c14030"
+      }
+    }
   }
 }

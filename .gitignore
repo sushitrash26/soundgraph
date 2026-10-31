@@ -51,3 +51,8 @@ pnpm-debug.log*
 Thumbs.db
 backend/data/*.db
 backend/data/*.db-*
+backend/data/uploads/
+backend/data/stems/
+backend/data/remixes/
+*.aux
+*.out

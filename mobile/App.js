@@ -7,7 +7,8 @@ import {
   Pressable,
   Image,
   Modal,
-  LogBox
+  LogBox,
+  Linking
 } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -78,6 +79,31 @@ export default function App() {
       init();
     }
     prepare();
+
+    const handleUrl = async (event) => {
+      const url = event?.url;
+      if (!url) return;
+      if (url.includes('soundgraph://') || url.includes('auth=')) {
+        if (url.includes('code=')) {
+          const provider = url.includes('spotify') ? 'spotify' : 'google';
+          await useMobileStore.getState().exchangeAuthCode(url, provider);
+        } else {
+          await useMobileStore.getState().checkBackendConnection();
+        }
+        const state = useMobileStore.getState();
+        if (state.user) {
+          state.setOnboardingStep('quiz');
+          state.closeAuthModal();
+        }
+      }
+    };
+
+    const sub = Linking.addEventListener('url', handleUrl);
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl({ url });
+    });
+
+    return () => sub.remove();
   }, []);
 
   if (!fontsLoaded) {
