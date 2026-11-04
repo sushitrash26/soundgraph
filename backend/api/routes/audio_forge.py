@@ -140,15 +140,17 @@ async def trigger_stem_separation(
                 await asyncio.sleep(0.3)
         return job
 
-    # Launch separation
-    background_tasks.add_task(_run_separation_task, job_id, job.source_file, user_id)
-    job.status = "queued"
+    # Launch separation in thread pool immediately so it runs concurrently without blocking
+    job.status = "separating"
+    task = asyncio.create_task(asyncio.to_thread(_run_separation_task, job_id, job.source_file, user_id))
 
-    # If wait requested (default), buffer until finished or timeout
+    # If wait requested (default), wait for thread task to complete or timeout
     if wait:
-        start_t = time.time()
-        while job.status in ["queued", "separating"] and (time.time() - start_t) < timeout_sec:
-            await asyncio.sleep(0.3)
+        try:
+            await asyncio.wait_for(task, timeout=float(timeout_sec))
+        except asyncio.TimeoutError:
+            logger.info(f"Separation job {job_id} still processing in background after {timeout_sec}s")
+            return job
 
         if job.status == "failed":
             raise HTTPException(status_code=500, detail=f"Stem separation failed: {job.error_message}")

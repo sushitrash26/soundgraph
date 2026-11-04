@@ -38,8 +38,8 @@ class AudioAnalyzer:
     async def _analyze_with_gemini(cls, file_path: str, mime_type: str, api_key: str) -> Optional[AudioStemManifest]:
         """Sends raw audio chunk to Gemini 1.5 Flash to extract non-hardcoded stem manifest."""
         file_size = os.path.getsize(file_path)
-        # For large files, take first 15MB to stay well within inline payload limits
-        read_bytes = min(file_size, 15 * 1024 * 1024)
+        # Sample up to 2MB (~45s audio) for fast network transmission and instant Gemini analysis
+        read_bytes = min(file_size, 2 * 1024 * 1024)
         with open(file_path, "rb") as f:
             audio_data = f.read(read_bytes)
 
